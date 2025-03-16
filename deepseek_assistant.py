@@ -6,7 +6,6 @@ import threading
 
 
 def load_model():
-    device = "cuda" if torch.cuda.is_available() else "cpu"
     model = AutoModelForCausalLM.from_pretrained(
         "deepseek-ai/deepseek-coder-6.7b-instruct",
         torch_dtype=torch.bfloat16,
@@ -17,23 +16,20 @@ def load_model():
     return model, tokenizer
 
 
-def analyze_java_code(model, tokenizer, code):
-    prompt = f"""
-    Refactor the original code according to SOLID principles. Write only the refactored code and do not write any explanation.
-    
-    ### Original code:
-    ```java
-    {code}
-    """
+def build_chat_prompt(history):
+    prompt = ""
+    for turn in history:
+        if turn["role"] == "user":
+            prompt += "User: " + turn["content"] + "\n"
+        elif turn["role"] == "assistant":
+            prompt += "Assistant: " + turn["content"] + "\n"
+    prompt += "Assistant: "
+    return prompt
 
-    # Girdi tokenlarına çevir
+
+def stream_generation(model, tokenizer, prompt):
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
-
-    # Streaming için TextIteratorStreamer kullanıyoruz.
-    # skip_prompt=True ile prompt kısmının üretilen çıktıda yer almasını engelliyoruz.
     streamer = TextIteratorStreamer(tokenizer, skip_prompt=True, skip_special_tokens=True)
-
-    # model.generate'i ayrı bir thread'de çalıştırıyoruz.
     thread = threading.Thread(target=model.generate, kwargs={
         "input_ids": inputs["input_ids"],
         "max_new_tokens": 5000,
@@ -41,12 +37,10 @@ def analyze_java_code(model, tokenizer, code):
         "streamer": streamer
     })
     thread.start()
-
     generated_text = ""
     for new_text in streamer:
         print(new_text, end="", flush=True)
         generated_text += new_text
-
     thread.join()
     return generated_text
 
@@ -64,19 +58,42 @@ def read_java_file(file_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Java Kod Analiz Aracı')
+    parser = argparse.ArgumentParser(description='Java Kod Analiz Chat Aracı')
     parser.add_argument('file', type=str, help='Analiz edilecek .java dosyasının yolu')
     args = parser.parse_args()
 
     java_code = read_java_file(args.file)
     model, tokenizer = load_model()
 
+    # Sohbet geçmişini tutan liste (başlangıç mesajı)
+    conversation_history = []
+    initial_message = (
+            "Refactor the original code according to SOLID principles. "
+            "Write only the refactored code and do not write any explanation.\n"
+            "### Original code:\n```java\n" + java_code + "\n```"
+    )
+    conversation_history.append({"role": "user", "content": initial_message})
+
     print(f"\n\033[1;34m{args.file} analiz ediliyor...\033[0m\n")
+    print("Initial Response:\n")
 
-    analysis = analyze_java_code(model, tokenizer, java_code)
+    # İlk yanıtı üret
+    prompt = build_chat_prompt(conversation_history)
+    response = stream_generation(model, tokenizer, prompt)
+    conversation_history.append({"role": "assistant", "content": response})
 
-    print("\n\033[1;36m### Analiz Sonuçları:\033[0m")
-    print(analysis)
+    # İnteraktif chat döngüsü
+    while True:
+        try:
+            user_input = input("\nUser: ")
+            if user_input.lower() in ["exit", "quit"]:
+                break
+            conversation_history.append({"role": "user", "content": user_input})
+            prompt = build_chat_prompt(conversation_history)
+            response = stream_generation(model, tokenizer, prompt)
+            conversation_history.append({"role": "assistant", "content": response})
+        except KeyboardInterrupt:
+            break
 
 
 if __name__ == "__main__":
