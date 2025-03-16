@@ -1,0 +1,114 @@
+### Analiz Sonuçları:
+```
+    ### Refactored code:
+    ```java
+    package com.galaksiya.api;
+
+import com.galaksiya.api.agent.IysApiAgents;
+import com.galaksiya.api.configuration.ApiConfiguration;
+import com.galaksiya.api.service.GlobalContext;
+import com.galaksiya.api.web.ServerConfiguration;
+import com.galaksiya.iys.configuration.MiddlewareConfig;
+import com.galaksiya.iys.utils.IysTerminator;
+import com.galaksiya.logger.GLogger;
+import com.iys.config.EnvironmentConfiguration;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.servlet.FilterHolder;
+import org.eclipse.jetty.servlet.ServletContextHandler;
+
+import javax.servlet.DispatcherType;
+import java.util.EnumSet;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+public class ApiDeamon {
+
+        private static final String MAX_REQUESTS_PER_SEC = "maxRequestsPerSec";
+        private static final String MAX_REQUEST_MS = "maxRequestMs";
+        private static final String DELAY_MS = "delayMs";
+
+        private static final GLogger gLogger = new GLogger(ApiDeamon.class);
+
+        private static final ExecutorService executorService = Executors.newFixedThreadPool(ApiConfiguration.getAgentThreadCount());
+        private static GlobalContext globalContext = GlobalContext.builder().build();
+
+        public static void main(String args[]) {
+                Thread.setDefaultUncaughtExceptionHandler(new IysUncaughtExceptionHandler());
+                ApiDeamonConfiguration.addShutDownHookProcess();
+
+                try {
+                        if (!globalContext.getCryptographerCaller().getCryptographer().hasSession()) {
+                                gLogger.startOperation("startAllApiSideAgent").fail();
+                                IysTerminator.quit(EnvironmentConfiguration.getEnvironmentName());
+                        }
+
+                        IysApiAgents.runAgents(executorService, globalContext);
+                        runServer();
+                } catch (Throwable t) {
+                        gLogger.startOperation("ApiDeamon_main").fail(t);
+                        IysTerminator.quit(EnvironmentConfiguration.getEnvironment());
+                }
+        }
+
+        private static void runServer() {
+                OperationLog log = gLogger.startOperation("runServer").addField("summary", "server start info")
+                                .addField("redisHost", MiddlewareConfig.getRedisHost())
+                                .addField("redisPort", MiddlewareConfig.getRedisPort())
+                                .addField("redisSentinelHost", MiddlewareConfig.getRedisSentinelHost())
+                                .addField("redisSentinelPort", MiddlewareConfig.getRedisSentinelPort())
+                                .addField("redisPoolSize", MiddlewareConfig.getRedisPoolSize())
+                                .addField("redisTimeout", MiddlewareConfig.getRedisSocketTimeout())
+                                .addField("redisExpiration", MiddlewareConfig.getRedisKeyExpiration())
+                                .addField("keycloakRealmName", MiddlewareConfig.getKeycloakHsRealmName());
+                Server server;
+                try {
+                        server = ServerConfiguration.createServer();
+                        ServletContextHandler contextHandler = ServerConfiguration.prepareServletContextHandler(globalContext);
+                        addRateLimitToPaths(contextHandler);
+                        server.setHandler(contextHandler);
+                        server.start();
+                        log.succeed();
+                        server.join();
+                } catch (Exception e) {
+                        log.fail(e);
+                        IysTerminator.quit(EnvironmentConfiguration.getEnvironmentName());
+                }
+        }
+
+        /**
+         * This method adds rate limit to the service paths.
+         *
+         * @param context
+         */
+        private static void addRateLimitToPaths(ServletContextHandler context) {
+                // add filters
+                EnumSet<DispatcherType> SCOPE = EnumSet.of(DispatcherType.REQUEST);
+
+                // create a request limit provider
+                FilterHolder holder = new FilterHolder(DoSFilter.class);
+                holder.setInitParameter(MAX_REQUESTS_PER_SEC, String.valueOf(ApiConfiguration.getRateLimit()));
+                holder.setInitParameter(MAX_REQUEST_MS, "60000");
+                holder.setInitParameter(DELAY_MS, "-1"); // "-1" to reject excess request
+                ApiConfiguration.getRateLimitedPaths().forEach(path -> context.addFilter(holder, path, SCOPE));
+
+        }
+1. Single Responsibility Principle (SRP): This involves a class doing one job (or carrying out one task). If a class has many responsibilities, it becomes coupled to its clients and difficult to change.
+
+2. Open/Closed Principle (OCP): This means that entities should be open for extension, but closed for modification. A system should be designed in such a way that it can be extended without modifying the code.
+
+3. Liskov Substitution Principle (LSP): It states that you should be able to replace any instance of a parent class with one of its subclasses without altering the correctness of the program.
+
+4. Interface Segregation Principle (ISP): It is a design principle for developing software entities which are maximally flexible, and minimally coupled.
+
+5. Dependency Inversion Principle (DIP): It is a specific form of decoupling software modules. This principle states that depend upon abstractions, not concretions.
+
+And refactoring patterns are general ways to rewrite code in a certain way to make it better or more readable. These can be things like extracting methods, introducing explanatory variables, etc.
+
+For example, you could refactor the main method in your ApiDeamon class. Instead of doing all of the work directly inside one huge method, you could break it into smaller methods, encapsulating different responsibilities into their own classes. This would adhere to the Single Responsibility Principle and the Open/Closed Principle, among other principles. You could also refactor the parts of the main method that handle server initialization and configuration into a ServerConfiguration class, adhering to the Single Responsibility Principle and the Open/Closed Principle.
+
+If you are looking for a specific kind of refactoring or a part of code that needs to be broken down, please provide more information.
+
+(.venv) PS C:\Users\pc\Desktop\CodeAssistant>
+
+
+
