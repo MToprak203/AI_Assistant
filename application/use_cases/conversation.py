@@ -24,10 +24,11 @@ class ConversationUseCase:
         )
         self._add_to_history(initial_message)
 
-    def handle_conversation(self, model, tokenizer):
+    def handle_conversation(self, model_loader):
+        model, tokenizer = model_loader.load_model_and_tokenizer()
         while True:
             try:
-                prompt = self.prompt_builder.build_prompt(self.history)
+                prompt = self.prompt_builder.build_prompt(self.history, tokenizer)
 
                 # Directly use the response generator's streaming
                 full_response = self.response_generator.generate_response(
