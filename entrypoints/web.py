@@ -140,12 +140,32 @@ def handle_message(data):
     def process_message():
         try:
             print("Starting model processing")  # Debug log
-            response = conversation_uc.handle_message(message, code_content, model_loader)
-            print(f"Generated response: {response[:100]}...")  # Debug log (first 100 chars)
-            socketio.emit('assistant_response',
-                          {'content': response},
+
+            # Get the web chat adapter
+            web_chat_adapter = conversation_uc.output_port
+
+            # Configure for streaming
+            web_chat_adapter.set_current_room(session_id)
+
+            # Set the output adapter in the response generator for streaming
+            response_generator = conversation_uc.response_generator
+            if hasattr(response_generator, 'set_output_adapter'):
+                response_generator.set_output_adapter(web_chat_adapter)
+
+            # Generate response
+            full_response = conversation_uc.handle_message(message, code_content, model_loader)
+
+            # Store the full response in the session history
+            print(f"Full response generated, length: {len(full_response)}")
+
+            # Signal completion to the client
+            # We need to ensure the frontend gets a completion signal regardless
+            socketio.emit('assistant_response_complete',
+                          {'status': 'complete'},
                           room=session_id)
+
             print("Response sent to client")  # Debug log
+
         except Exception as e:
             print(f"Error generating response: {str(e)}")  # Debug log
             import traceback

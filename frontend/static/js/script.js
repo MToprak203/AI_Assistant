@@ -3,6 +3,7 @@ let socket;
 let sessionId;
 let currentFilePath = null;
 let isProcessing = false;
+let currentStreamingMessage = null;
 
 // DOM elements
 const messagesContainer = document.getElementById('messages');
@@ -50,20 +51,67 @@ function connectSocket() {
     socket.on('message_received', (data) => {
         if (data.status === 'processing') {
             isProcessing = true;
+            // Create an empty container for streaming response
             addProcessingIndicator();
+
+            // Initialize an empty streaming message container
+            currentStreamingMessage = '';
         }
     });
 
+    // Handle streaming chunks
+    socket.on('assistant_chunk', (data) => {
+        if (currentStreamingMessage !== null) {
+            // Append new chunk to current message
+            currentStreamingMessage += data.content;
+
+            // Update the streaming message container
+            updateStreamingMessage(currentStreamingMessage);
+        }
+    });
+
+    // Handle complete message (legacy support)
     socket.on('assistant_response', (data) => {
+        console.log('Received complete message event');
         isProcessing = false;
-        removeProcessingIndicator();
-        addMessage('assistant', data.content);
-        scrollToBottom();
+
+        if (data.complete) {
+            console.log('Handling complete message (non-streaming)');
+            // This is a complete message (not a chunk)
+            removeProcessingIndicator();
+            addMessage('assistant', data.content);
+            scrollToBottom();
+            currentStreamingMessage = null;
+        }
+    });
+
+    // Handle message completion signal
+    socket.on('assistant_response_complete', (data) => {
+        console.log('Response complete, finalizing message with content:', currentStreamingMessage?.substring(0, 50) + '...');
+        isProcessing = false;
+
+        // This is the critical part - ensure we have message content
+        if (currentStreamingMessage && currentStreamingMessage.trim().length > 0) {
+            // Store the message content in a local variable to ensure it doesn't get cleared
+            const messageContent = currentStreamingMessage;
+
+            // Convert the streaming message container to a proper message
+            removeProcessingIndicator();
+            addMessage('assistant', messageContent);
+            scrollToBottom();
+        } else {
+            console.log('Warning: No streaming message content to finalize');
+            removeProcessingIndicator();
+        }
+
+        // Reset streaming message state after finalizing
+        currentStreamingMessage = null;
     });
 
     socket.on('error', (data) => {
         isProcessing = false;
         removeProcessingIndicator();
+        currentStreamingMessage = null;
         showError(data.message);
     });
 
@@ -193,18 +241,53 @@ function addProcessingIndicator() {
     const messageContent = document.createElement('div');
     messageContent.className = 'message-content flex items-center';
 
+    // Add the animated dots while waiting for the first chunk
     const dots = document.createElement('div');
+    dots.id = 'streaming-dots';
     dots.className = 'flex space-x-2';
     dots.innerHTML = `
-                <div class="h-2 w-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0s"></div>
-                <div class="h-2 w-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-                <div class="h-2 w-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
-            `;
+        <div class="h-2 w-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0s"></div>
+        <div class="h-2 w-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+        <div class="h-2 w-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0.4s"></div>
+    `;
+
+    // Create a separate div for the streamed content
+    const streamingContent = document.createElement('div');
+    streamingContent.id = 'streaming-content';
+    streamingContent.className = 'w-full mt-2';
+    streamingContent.style.display = 'none'; // Hidden initially
 
     messageContent.appendChild(dots);
+    messageContent.appendChild(streamingContent);
     indicator.appendChild(avatarContainer);
     indicator.appendChild(messageContent);
     messagesContainer.appendChild(indicator);
+}
+
+// Update streaming message with new content
+function updateStreamingMessage(content) {
+    const streamingContent = document.getElementById('streaming-content');
+    const dots = document.getElementById('streaming-dots');
+
+    if (streamingContent) {
+        // Hide the dots and show the content on first update
+        if (streamingContent.style.display === 'none') {
+            if (dots) dots.style.display = 'none';
+            streamingContent.style.display = 'block';
+        }
+
+        // Parse markdown for the current streamed content
+        streamingContent.innerHTML = marked.parse(content);
+
+        // Apply syntax highlighting to any code blocks
+        const codeBlocks = streamingContent.querySelectorAll('pre code');
+        codeBlocks.forEach(codeBlock => {
+            hljs.highlightElement(codeBlock);
+        });
+
+        // Scroll to bottom to follow the streaming text
+        scrollToBottom();
+    }
 }
 
 // Remove processing indicator

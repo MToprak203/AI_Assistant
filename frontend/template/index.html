@@ -5,8 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Code Assistant</title>
 
-    <!-- Tailwind CSS -->
+    <!-- Tailwind CSS with animation config -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        bounce: 'bounce 1s infinite'
+                    },
+                    keyframes: {
+                        bounce: {
+                            '0%, 100%': {
+                                transform: 'translateY(0)',
+                                animationTimingFunction: 'cubic-bezier(0.8, 0, 1, 1)'
+                            },
+                            '50%': {
+                                transform: 'translateY(-8px)',
+                                animationTimingFunction: 'cubic-bezier(0, 0, 0.2, 1)'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
 
     <!-- Highlight.js for code highlighting -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/github-dark.min.css">

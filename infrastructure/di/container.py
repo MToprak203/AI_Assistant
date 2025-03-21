@@ -4,9 +4,9 @@ from dependency_injector import containers, providers
 from application.use_cases.conversation import ConversationUseCase
 from core.domain.models import AnalysisConfig
 from infrastructure.adapters.chat_output.cli_adapter import CLIChatAdapter
-from infrastructure.adapters.chat_output.web_adapter import WebChatAdapter  # New import
+from infrastructure.adapters.chat_output.web_adapter import WebChatAdapter
 from infrastructure.adapters.file_handlers.local_file_adapter import LocalFileAdapter
-from infrastructure.adapters.file_handlers.web_file_adapter import WebFileAdapter  # New import
+from infrastructure.adapters.file_handlers.web_file_adapter import WebFileAdapter
 from infrastructure.adapters.model_loaders.huggingface_adapter import HuggingFaceModelAdapter
 from infrastructure.adapters.prompt_builders.conversation_adapter import ModelAwarePromptAdapter
 from infrastructure.adapters.response_generators.streaming_adapter import StreamingResponseAdapter

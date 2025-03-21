@@ -15,6 +15,10 @@ class ConversationUseCase:
         self.config = config
         self.history: List[ChatMessage] = []
 
+        # Connect the response generator to the output port if possible
+        if hasattr(self.response_generator, 'set_output_adapter'):
+            self.response_generator.set_output_adapter(self.output_port)
+
     def initialize_with_code(self, code: str, task: str = "Refactor according to SOLID principles"):
         """Initialize conversation with code content"""
         initial_message = ChatMessage(
@@ -42,15 +46,22 @@ class ConversationUseCase:
 
         # Build prompt and generate response
         prompt = self.prompt_builder.build_prompt(self.history, self.tokenizer)
+
+        # Make sure response generator has output adapter before generating
+        if hasattr(self.response_generator, 'set_output_adapter'):
+            self.response_generator.set_output_adapter(self.output_port)
+
+        # Generate the response (this will stream chunks if a streaming adapter is used)
         response = self.response_generator.generate_response(
             prompt,
             self.model,
             self.tokenizer
         )
 
-        # Add response to history
+        # Add the complete response to history
         self._add_to_history(ChatMessage(role="assistant", content=response))
 
+        # Return the complete response (important for history)
         return response
 
     def get_history(self):
@@ -58,6 +69,7 @@ class ConversationUseCase:
         return self.history
 
     def _add_to_history(self, message: ChatMessage):
+        """Add a message to the conversation history, maintaining max length"""
         if len(self.history) >= self.config.max_history_length:
             self.history.pop(0)
         self.history.append(message)
