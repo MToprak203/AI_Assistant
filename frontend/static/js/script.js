@@ -4,6 +4,8 @@ let sessionId;
 let currentFilePath = null;
 let isProcessing = false;
 let currentStreamingMessage = null;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
 
 // DOM elements
 const messagesContainer = document.getElementById('messages');
@@ -33,10 +35,18 @@ async function initApp() {
 
 // Connect to WebSocket
 function connectSocket() {
+    // If socket exists and is connected, don't reconnect
+    if (socket && socket.connected) {
+        console.log('Socket already connected');
+        return;
+    }
+
+    // Create new socket connection
     socket = io();
 
     socket.on('connect', () => {
-        console.log('Socket connected');
+        console.log('Socket connected, joining session:', sessionId);
+        reconnectAttempts = 0; // Reset reconnect attempts on successful connection
         socket.emit('join_session', {session_id: sessionId});
     });
 
@@ -117,13 +127,36 @@ function connectSocket() {
 
     socket.on('disconnect', () => {
         console.log('Socket disconnected');
+        // Try to reconnect if disconnected
+        tryReconnect();
     });
+}
+
+// Try to reconnect the socket
+function tryReconnect() {
+    if (reconnectAttempts < maxReconnectAttempts) {
+        reconnectAttempts++;
+        console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})...`);
+        setTimeout(() => {
+            connectSocket();
+        }, 1000 * reconnectAttempts); // Increasing backoff
+    } else {
+        showError('Lost connection to server. Please refresh the page.');
+    }
 }
 
 // Send a message
 function sendMessage() {
     const message = messageInput.value.trim();
     if (!message || isProcessing) return;
+
+    // Ensure socket is connected
+    if (!socket || !socket.connected) {
+        console.log('Socket not connected, attempting to reconnect...');
+        connectSocket();
+        showError('Connection to server lost. Trying to reconnect...');
+        return;
+    }
 
     addMessage('user', message);
     messageInput.value = '';
@@ -142,6 +175,9 @@ async function uploadFile(file) {
     formData.append('file', file);
 
     try {
+        // Show uploading status
+        showToast('Uploading file...');
+
         const response = await fetch('/api/upload', {
             method: 'POST',
             body: formData
@@ -160,8 +196,31 @@ async function uploadFile(file) {
 
         // Show success message
         showToast(`File uploaded: ${data.filename}`);
+
+        // Make sure we're still connected to our session
+        ensureSocketConnection();
     } catch (error) {
         showError('Failed to upload file: ' + error.message);
+    }
+}
+
+// Ensure socket connection is active
+function ensureSocketConnection() {
+    console.log('Checking socket connection...');
+
+    if (!socket || !socket.connected) {
+        console.log('Socket not connected, reconnecting...');
+        connectSocket();
+
+        // If we have a session ID, rejoin the session
+        if (sessionId) {
+            console.log('Rejoining session:', sessionId);
+            setTimeout(() => {
+                socket.emit('join_session', {session_id: sessionId});
+            }, 500); // Short delay to ensure socket is ready
+        }
+    } else {
+        console.log('Socket connection is active');
     }
 }
 

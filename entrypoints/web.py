@@ -3,7 +3,7 @@ import os
 import threading
 from pathlib import Path
 
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, render_template, send_from_directory, session as flask_session
 from flask_socketio import SocketIO, emit, join_room
 
 from infrastructure.adapters.chat_output.web_adapter import WebChatAdapter
@@ -23,9 +23,11 @@ app = Flask(__name__,
 
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['UPLOAD_FOLDER'] = str(UPLOAD_DIR)
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # Session lifetime in seconds (1 hour)
 
 # Initialize socketio with CORS
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", manage_session=False)
 
 # Set up DI container
 container = Container()
@@ -46,21 +48,27 @@ session_manager = SessionManager()
 web_file_adapter = WebFileAdapter(upload_folder=app.config['UPLOAD_FOLDER'])
 web_chat_adapter = WebChatAdapter(socketio)
 
+
 @app.route('/')
 def index():
     """Render the main chat interface"""
     return render_template('index.html')
+
 
 @app.route('/<path:filename>')
 def serve_static(filename):
     """Serve static files"""
     return send_from_directory(app.static_folder, filename)
 
+
 @app.route('/api/sessions', methods=['POST'])
 def create_session():
     """Create a new chat session"""
     try:
         session_id = session_manager.create_session()
+
+        # Store session ID in Flask session
+        flask_session['chat_session_id'] = session_id
 
         # Initialize model and conversation use case for this session
         model_loader = container.model_loader()
@@ -93,6 +101,8 @@ def handle_join_session(data):
 
     if session_id and session_manager.get_session(session_id):
         join_room(session_id)
+        # Store the session ID in the Flask session
+        flask_session['chat_session_id'] = session_id
         emit('session_joined', {'status': 'success'})
     else:
         emit('session_joined', {'status': 'error', 'message': 'Invalid session'})
@@ -141,10 +151,8 @@ def handle_message(data):
         try:
             print("Starting model processing")  # Debug log
 
-            # Get the web chat adapter
+            # Set the current room in the chat adapter for streaming
             web_chat_adapter = conversation_uc.output_port
-
-            # Configure for streaming
             web_chat_adapter.set_current_room(session_id)
 
             # Set the output adapter in the response generator for streaming
@@ -192,12 +200,21 @@ def upload_file():
         return jsonify({'error': 'No selected file'}), 400
 
     try:
+        # Get current session ID from the Flask session
+        session_id = flask_session.get('chat_session_id')
+        print(f"Processing file upload for session: {session_id}")
+
+        # Save the file
         file_path = web_file_adapter.save_uploaded_file(file)
+
+        # Return file info along with session ID to help client stay in context
         return jsonify({
             'file_path': file_path,
-            'filename': os.path.basename(file_path)
+            'filename': os.path.basename(file_path),
+            'session_id': session_id  # Return session ID to client
         })
     except Exception as e:
+        app.logger.error(f"Error uploading file: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
