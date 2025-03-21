@@ -1,6 +1,6 @@
 # application/use_cases/conversation.py
 from core.domain.models import ChatMessage, AnalysisConfig
-from typing import List, Generator
+from typing import List, Optional
 
 
 class ConversationUseCase:
@@ -15,41 +15,47 @@ class ConversationUseCase:
         self.config = config
         self.history: List[ChatMessage] = []
 
-    def initialize_with_code(self, code: str):
+    def initialize_with_code(self, code: str, task: str = "Refactor according to SOLID principles"):
         """Initialize conversation with code content"""
         initial_message = ChatMessage(
             role="user",
-            content=f"Refactor the following Java code according to SOLID principles:\n```java\n{code}\n```\n"
-                    f"Write only the refactored code without explanations."
+            content=f"{task}:\n```java\n{code}\n```\n"
         )
         self._add_to_history(initial_message)
+        return initial_message
 
-    def handle_conversation(self, model_loader):
-        model, tokenizer = model_loader.load_model_and_tokenizer()
-        while True:
-            try:
-                prompt = self.prompt_builder.build_prompt(self.history, tokenizer)
+    def handle_message(self, user_message: str, code_file: Optional[str] = None, model_loader=None) -> str:
+        """Handle a single message from the user and return the assistant response"""
+        if code_file:
+            # If code is provided, add context about the code
+            message_with_code = f"{user_message}\n\nHere's the code I'm working with:\n```\n{code_file}\n```"
+            self._add_to_history(ChatMessage(role="user", content=message_with_code))
+        else:
+            self._add_to_history(ChatMessage(role="user", content=user_message))
 
-                # Directly use the response generator's streaming
-                full_response = self.response_generator.generate_response(
-                    prompt,
-                    model,
-                    tokenizer
-                )
+        # Load model if not provided
+        if not hasattr(self, 'model') or not hasattr(self, 'tokenizer'):
+            if model_loader:
+                self.model, self.tokenizer = model_loader.load_model_and_tokenizer()
+            else:
+                raise ValueError("Model loader must be provided on first call")
 
-                self._add_to_history(ChatMessage(
-                    role="assistant",
-                    content=full_response
-                ))
+        # Build prompt and generate response
+        prompt = self.prompt_builder.build_prompt(self.history, self.tokenizer)
+        response = self.response_generator.generate_response(
+            prompt,
+            self.model,
+            self.tokenizer
+        )
 
-                user_input = self.output_port.get_user_input("\nUser: ")
-                if user_input.lower() in ["exit", "quit"]:
-                    break
+        # Add response to history
+        self._add_to_history(ChatMessage(role="assistant", content=response))
 
-                self._add_to_history(ChatMessage(role="user", content=user_input))
+        return response
 
-            except KeyboardInterrupt:
-                break
+    def get_history(self):
+        """Return conversation history"""
+        return self.history
 
     def _add_to_history(self, message: ChatMessage):
         if len(self.history) >= self.config.max_history_length:
