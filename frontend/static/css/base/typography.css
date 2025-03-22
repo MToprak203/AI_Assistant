@@ -1,0 +1,96 @@
+/* frontend/static/css/base/typography.css */
+
+/* Headings */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.25;
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+h1 {
+  font-size: 1.875rem; /* 30px */
+}
+
+h2 {
+  font-size: 1.5rem; /* 24px */
+}
+
+h3 {
+  font-size: 1.25rem; /* 20px */
+}
+
+h4 {
+  font-size: 1.125rem; /* 18px */
+}
+
+h5, h6 {
+  font-size: 1rem; /* 16px */
+}
+
+/* Paragraphs */
+p {
+  margin-bottom: 0.75rem;
+}
+
+/* Links */
+a {
+  color: var(--color-primary);
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--color-primary-hover);
+}
+
+/* Lists */
+ul, ol {
+  margin-bottom: 0.75rem;
+  padding-left: 1.5rem;
+}
+
+ul {
+  list-style-type: disc;
+}
+
+ol {
+  list-style-type: decimal;
+}
+
+li {
+  margin-bottom: 0.25rem;
+}
+
+/* Inline code */
+code:not(pre code) {
+  font-family: 'Fira Code', monospace, Consolas, Monaco, 'Andale Mono', monospace;
+  padding: 0.1rem 0.3rem;
+  background-color: var(--color-code-bg);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.875rem;
+}
+
+/* Block quotes */
+blockquote {
+  border-left: 4px solid var(--color-border);
+  padding-left: 1rem;
+  margin-left: 0;
+  margin-right: 0;
+  font-style: italic;
+  color: var(--color-text-light);
+}
+
+/* Strong and emphasis */
+strong {
+  font-weight: 600;
+}
+
+em {
+  font-style: italic;
+}
+
+/* Text selection */
+::selection {
+  background-color: var(--color-primary);
+  color: white;
+}

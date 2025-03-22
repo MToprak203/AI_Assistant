@@ -1,0 +1,63 @@
+/* frontend/static/css/components/file-upload.css */
+
+/* File upload container */
+.file-upload-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: var(--spacing-md);
+}
+
+/* Upload button */
+.upload-button {
+  display: flex;
+  align-items: center;
+  background-color: #f3f4f6;
+  color: var(--color-text);
+  border: none;
+  border-radius: var(--border-radius-lg);
+  padding: var(--spacing-sm) var(--spacing-md);
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+  margin-right: var(--spacing-md);
+}
+
+.upload-button:hover {
+  background-color: #e5e7eb;
+}
+
+.upload-button-icon {
+  margin-right: var(--spacing-sm);
+}
+
+/* Hidden file input */
+.file-input {
+  display: none;
+}
+
+/* File info display */
+.file-info {
+  display: flex;
+  align-items: center;
+  font-size: 0.875rem;
+  color: var(--color-text-light);
+}
+
+.file-name {
+  margin-right: var(--spacing-sm);
+}
+
+/* Clear file button */
+.clear-file-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-error);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: color var(--transition-fast);
+}
+
+.clear-file-button:hover {
+  color: #dc2626;
+}

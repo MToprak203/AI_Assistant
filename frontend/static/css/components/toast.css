@@ -1,0 +1,26 @@
+/* frontend/static/css/components/toast.css */
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  padding: 12px 16px;
+  background-color: var(--color-primary);
+  color: white;
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-index-toast);
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* Toast success variant */
+.toast-success {
+  background-color: var(--color-success);
+}
+
+/* Toast error variant */
+.toast-error {
+  background-color: var(--color-error);
+}

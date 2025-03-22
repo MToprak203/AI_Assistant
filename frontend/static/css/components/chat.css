@@ -1,0 +1,96 @@
+/* frontend/static/css/components/chat.css */
+
+/* Chat container */
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Messages container */
+.messages-container {
+  flex: 1;
+  overflow-y: auto;
+  background-color: var(--color-background-alt);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  margin-bottom: var(--spacing-md);
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--spacing-xl);
+  color: var(--color-text-light);
+}
+
+.empty-state-icon {
+  margin-bottom: var(--spacing-md);
+  color: var(--color-primary);
+}
+
+.empty-state-title {
+  font-weight: 600;
+  font-size: 1.5rem;
+  margin-bottom: var(--spacing-sm);
+}
+
+.empty-state-description {
+  max-width: 24rem;
+  margin: 0 auto;
+}
+
+/* Input container */
+.input-container {
+  background-color: var(--color-background-alt);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--spacing-md);
+}
+
+/* Message input */
+.message-input-container {
+  display: flex;
+}
+
+.message-input {
+  flex: 1;
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg) 0 0 var(--border-radius-lg);
+  padding: var(--spacing-md);
+  resize: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.message-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(67, 56, 202, 0.2);
+}
+
+/* Send button */
+.send-button {
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+  padding: 0 var(--spacing-lg);
+  border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.send-button:hover {
+  background-color: var(--color-primary-hover);
+}
+
+.send-button-icon {
+  height: 1.5rem;
+  width: 1.5rem;
+}

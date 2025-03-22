@@ -1,0 +1,120 @@
+/* frontend/static/css/components/message.css */
+
+/* Message container */
+.message-container {
+  display: flex;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* User message styling */
+.message-container.user {
+  background-color: var(--color-user-bg);
+}
+
+/* Assistant message styling */
+.message-container.assistant {
+  background-color: var(--color-assistant-bg);
+}
+
+/* Avatar container */
+.avatar-container {
+  flex-shrink: 0;
+  margin-right: var(--spacing-md);
+}
+
+/* Avatar */
+.avatar {
+  height: 2rem;
+  width: 2rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+/* User avatar */
+.avatar.user {
+  background-color: var(--color-user-avatar-bg);
+  color: var(--color-user-avatar-text);
+}
+
+/* Assistant avatar */
+.avatar.assistant {
+  background-color: var(--color-assistant-avatar-bg);
+  color: var(--color-assistant-avatar-text);
+}
+
+/* Message content */
+.message-content {
+  flex: 1;
+}
+
+/* Processing indicator */
+.processing-indicator {
+  display: flex;
+  align-items: center;
+}
+
+.streaming-dots {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.streaming-dot {
+  height: 0.5rem;
+  width: 0.5rem;
+  background-color: #888;
+  border-radius: 50%;
+}
+
+.streaming-content {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+/* Error message */
+.error-message {
+  background-color: var(--color-error-light);
+  border-left: 4px solid var(--color-error-border);
+  color: var(--color-error);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  border-radius: var(--border-radius-sm);
+}
+
+/* Code blocks */
+.message-content pre {
+  position: relative;
+  border-radius: var(--border-radius-md);
+  margin: 1em 0;
+  overflow-x: auto;
+}
+
+.message-content pre code {
+  border-radius: var(--border-radius-md);
+  font-family: 'Fira Code', monospace;
+  padding: var(--spacing-md);
+  display: block;
+}
+
+/* Copy button for code blocks */
+.copy-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  color: white;
+  border: none;
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+pre:hover .copy-btn {
+  opacity: 1;
+}
