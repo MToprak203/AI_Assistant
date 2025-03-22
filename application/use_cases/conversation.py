@@ -14,6 +14,8 @@ class ConversationUseCase:
         self.prompt_builder = prompt_builder
         self.config = config
         self.history: List[ChatMessage] = []
+        self.model = None
+        self.tokenizer = None
 
         # Connect the response generator to the output port if possible
         if hasattr(self.response_generator, 'set_output_adapter'):
@@ -28,6 +30,11 @@ class ConversationUseCase:
         self._add_to_history(initial_message)
         return initial_message
 
+    def set_model_and_tokenizer(self, model, tokenizer):
+        """Set the model and tokenizer to use for this conversation"""
+        self.model = model
+        self.tokenizer = tokenizer
+
     def handle_message(self, user_message: str, code_file: Optional[str] = None, model_loader=None) -> str:
         """Handle a single message from the user and return the assistant response"""
         if code_file:
@@ -37,12 +44,13 @@ class ConversationUseCase:
         else:
             self._add_to_history(ChatMessage(role="user", content=user_message))
 
-        # Load model if not provided
-        if not hasattr(self, 'model') or not hasattr(self, 'tokenizer'):
+        # Load model if not available
+        if self.model is None or self.tokenizer is None:
             if model_loader:
                 self.model, self.tokenizer = model_loader.load_model_and_tokenizer()
             else:
-                raise ValueError("Model loader must be provided on first call")
+                raise ValueError(
+                    "Model and tokenizer not set. Either call set_model_and_tokenizer() or provide model_loader")
 
         # Build prompt and generate response
         prompt = self.prompt_builder.build_prompt(self.history, self.tokenizer)

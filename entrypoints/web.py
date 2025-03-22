@@ -8,6 +8,7 @@ from flask_socketio import SocketIO, emit, join_room
 
 from infrastructure.adapters.chat_output.web_adapter import WebChatAdapter
 from infrastructure.adapters.file_handlers.web_file_adapter import WebFileAdapter
+from infrastructure.adapters.model_loaders.model_manager import ModelManager
 from infrastructure.di.container import Container
 from infrastructure.session.session_manager import SessionManager
 
@@ -41,6 +42,13 @@ container.config.from_dict({
 # Set the socketio instance in the container
 container.socketio.override(socketio)
 
+# Initialize the model during app startup
+print("Initializing model...")
+container.initialize_model()
+model_manager = container.model_manager()
+model, tokenizer = model_manager.get_model_and_tokenizer()
+print("Model initialized successfully!")
+
 # Create session manager
 session_manager = SessionManager()
 
@@ -70,17 +78,17 @@ def create_session():
         # Store session ID in Flask session
         flask_session['chat_session_id'] = session_id
 
-        # Initialize model and conversation use case for this session
-        model_loader = container.model_loader()
-
         # Create a new conversation use case for this session
         conversation_uc = container.conversation_uc(
             output_port=web_chat_adapter
         )
 
+        # Set the model and tokenizer directly
+        conversation_uc.set_model_and_tokenizer(model, tokenizer)
+
         # Store in session manager
         session_manager.set_session_data(session_id, 'conversation_uc', conversation_uc)
-        session_manager.set_session_data(session_id, 'model_loader', model_loader)
+        # We don't need to store the model_loader since we're using the pre-loaded model
 
         return jsonify({'session_id': session_id})
     except Exception as e:
@@ -129,7 +137,6 @@ def handle_message(data):
 
     print(f"Session data: {session_data.keys()}")  # Debug log
     conversation_uc = session_data['conversation_uc']
-    model_loader = session_data['model_loader']
 
     # Process file if provided
     code_content = None
@@ -160,8 +167,8 @@ def handle_message(data):
             if hasattr(response_generator, 'set_output_adapter'):
                 response_generator.set_output_adapter(web_chat_adapter)
 
-            # Generate response
-            full_response = conversation_uc.handle_message(message, code_content, model_loader)
+            # Generate response - we don't need to pass model_loader anymore
+            full_response = conversation_uc.handle_message(message, code_content)
 
             # Store the full response in the session history
             print(f"Full response generated, length: {len(full_response)}")

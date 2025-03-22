@@ -8,6 +8,7 @@ from infrastructure.adapters.chat_output.web_adapter import WebChatAdapter
 from infrastructure.adapters.file_handlers.local_file_adapter import LocalFileAdapter
 from infrastructure.adapters.file_handlers.web_file_adapter import WebFileAdapter
 from infrastructure.adapters.model_loaders.huggingface_adapter import HuggingFaceModelAdapter
+from infrastructure.adapters.model_loaders.model_manager import ModelManager
 from infrastructure.adapters.prompt_builders.conversation_adapter import ModelAwarePromptAdapter
 from infrastructure.adapters.response_generators.streaming_adapter import StreamingResponseAdapter
 
@@ -24,12 +25,23 @@ class Container(containers.DeclarativeContainer):
         default_temp=config.default_temp
     )
 
-    # Adapters
+    # Model manager (singleton)
+    model_manager = providers.Singleton(ModelManager)
+
+    # Model initialization function
+    initialize_model = providers.Callable(
+        lambda model_manager, model_name: model_manager.initialize(model_name),
+        model_manager=model_manager,
+        model_name=config.model_name
+    )
+
+    # Model loader
     model_loader = providers.Factory(
         HuggingFaceModelAdapter,
         model_name=config.model_name
     )
 
+    # File handler
     file_handler = providers.Selector(
         config.context,
         cli=providers.Factory(LocalFileAdapter),
