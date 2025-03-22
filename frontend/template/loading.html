@@ -1,0 +1,137 @@
+<!-- frontend/template/loading.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loading - AI Code Assistant</title>
+
+    <!-- Tailwind CSS with animation config -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    animation: {
+                        bounce: 'bounce 1s infinite',
+                        spin: 'spin 1s linear infinite'
+                    },
+                    keyframes: {
+                        bounce: {
+                            '0%, 100%': {
+                                transform: 'translateY(0)',
+                                animationTimingFunction: 'cubic-bezier(0.8, 0, 1, 1)'
+                            },
+                            '50%': {
+                                transform: 'translateY(-8px)',
+                                animationTimingFunction: 'cubic-bezier(0, 0, 0.2, 1)'
+                            }
+                        },
+                        spin: {
+                            from: {
+                                transform: 'rotate(0deg)'
+                            },
+                            to: {
+                                transform: 'rotate(360deg)'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Our CSS -->
+    <link rel="stylesheet" href="../static/css/main.css">
+
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    <header class="header">
+        <h1 class="header-title">AI Code Assistant</h1>
+    </header>
+
+    <main class="loading-container flex items-center justify-center min-h-screen -mt-16">
+        <div class="w-full max-w-md p-8 bg-white rounded-lg shadow-lg">
+            <div class="text-center mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-16 w-16 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                </svg>
+                <h2 class="mt-4 text-xl font-semibold text-gray-800">Loading AI Code Assistant</h2>
+                <p class="mt-2 text-gray-600">Please wait while we initialize your session</p>
+            </div>
+
+            <div class="space-y-6">
+                <!-- Connection Status -->
+                <div class="flex items-center">
+                    <div id="server-connection-icon" class="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-full bg-gray-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-sm font-medium text-gray-900">Server Connection</h3>
+                        <p id="server-connection-status" class="text-sm text-gray-500">Connecting to server...</p>
+                    </div>
+                </div>
+
+                <!-- Session Status -->
+                <div class="flex items-center">
+                    <div id="session-icon" class="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-full bg-gray-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-sm font-medium text-gray-900">Session Initialization</h3>
+                        <p id="session-status" class="text-sm text-gray-500">Waiting for connection...</p>
+                    </div>
+                </div>
+
+                <!-- Model Status -->
+                <div class="flex items-center">
+                    <div id="model-icon" class="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-full bg-gray-200">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-sm font-medium text-gray-900">AI Model Loading</h3>
+                        <p id="model-status" class="text-sm text-gray-500">Waiting for session...</p>
+                    </div>
+                </div>
+
+                <!-- Error Message -->
+                <div id="error-container" class="hidden mt-6 bg-red-50 p-4 rounded-md border border-red-200">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-red-800">Connection Error</h3>
+                            <div class="mt-2 text-sm text-red-700">
+                                <p id="error-message">Unable to connect to server. Please try again later.</p>
+                            </div>
+                            <div class="mt-4">
+                                <button type="button" id="retry-button" class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                                    <svg class="-ml-0.5 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                                    </svg>
+                                    Try Again
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Loading Script -->
+    <script src="../static/js/config.js"></script>
+    <script src="../static/js/loading.js"></script>
+</body>
+</html>

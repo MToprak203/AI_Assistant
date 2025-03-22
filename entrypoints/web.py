@@ -1,6 +1,7 @@
 # entrypoints/web.py
 import os
 import threading
+import time
 from pathlib import Path
 
 from flask import Flask, request, jsonify, render_template, send_from_directory, session as flask_session
@@ -53,6 +54,9 @@ class WebApp:
         self.session_manager = SessionManager()
         self.model_manager = self.container.model_manager()
 
+        # Track model initialization status
+        self.model_initialization_threads = {}
+
         # Register routes and socket events
         self._register_routes()
         self._register_socket_events()
@@ -63,7 +67,16 @@ class WebApp:
         @self.app.route('/')
         def index():
             """Render the main chat interface."""
+            # Check if model is initialized
+            if not self.model_manager.is_initialized():
+                # Redirect to loading page if not initialized
+                return render_template('loading.html')
             return render_template('index.html')
+
+        @self.app.route('/loading')
+        def loading():
+            """Render the loading page."""
+            return render_template('loading.html')
 
         @self.app.route('/<path:filename>')
         def serve_static(filename):
@@ -74,13 +87,6 @@ class WebApp:
         def create_session():
             """Create a new chat session."""
             try:
-                # Ensure model is loaded
-                if not self.model_manager.is_initialized():
-                    self.model_manager.initialize(self.container.config.model_name())
-
-                # Get model and tokenizer
-                model, tokenizer = self.model_manager.get_model_and_tokenizer()
-
                 # Create new session
                 session_id = self.session_manager.create_session()
 
@@ -92,11 +98,22 @@ class WebApp:
                     output_port=self.chat_adapter
                 )
 
-                # Set the model and tokenizer directly
-                conversation_uc.set_model_and_tokenizer(model, tokenizer)
-
                 # Store in session manager
                 self.session_manager.set_session_data(session_id, 'conversation_uc', conversation_uc)
+
+                # Check if model is initialized
+                if not self.model_manager.is_initialized():
+                    # Start model initialization in background
+                    self._initialize_model_async(session_id)
+                else:
+                    # Model already initialized, set it for this conversation
+                    model, tokenizer = self.model_manager.get_model_and_tokenizer()
+                    conversation_uc.set_model_and_tokenizer(model, tokenizer)
+
+                    # Notify client that model is ready
+                    self.socketio.emit('model_initialized',
+                                       {'status': 'success'},
+                                       room=session_id)
 
                 return jsonify({'session_id': session_id})
             except Exception as e:
@@ -150,6 +167,19 @@ class WebApp:
                 # Store the session ID in the Flask session
                 flask_session['chat_session_id'] = session_id
                 emit('session_joined', {'status': 'success'})
+
+                # Send current model status
+                if self.model_manager.is_initialized():
+                    emit('model_initialized', {'status': 'success'})
+                else:
+                    # If initialization is in progress
+                    if session_id in self.model_initialization_threads:
+                        thread = self.model_initialization_threads[session_id]
+                        if thread and thread.is_alive():
+                            emit('model_status', {'status': 'loading', 'message': 'Loading AI model...'})
+                    else:
+                        # Start model initialization if not already started
+                        self._initialize_model_async(session_id)
             else:
                 emit('session_joined', {'status': 'error', 'message': 'Invalid session'})
 
@@ -192,6 +222,68 @@ class WebApp:
 
             # Process in a separate thread to not block the server
             self._process_message_async(session_id, conversation_uc, message, code_content)
+
+    def _initialize_model_async(self, session_id):
+        """Initialize model in a separate thread and update the client."""
+
+        def initialize_task():
+            try:
+                # Notify client that model loading has started
+                self.socketio.emit('model_status',
+                                   {'status': 'loading', 'message': 'Loading AI model...'},
+                                   room=session_id)
+
+                # Initialize the model
+                print(f"Initializing model for session {session_id}...")
+                start_time = time.time()
+
+                if not self.model_manager.is_initialized():
+                    self.model_manager.initialize(self.container.config.model_name())
+
+                model, tokenizer = self.model_manager.get_model_and_tokenizer()
+
+                # Calculate loading time
+                loading_time = time.time() - start_time
+                print(f"Model initialized in {loading_time:.2f} seconds")
+
+                # Update the conversation use case for this session
+                session_data = self.session_manager.get_session(session_id)
+                if session_data and 'conversation_uc' in session_data:
+                    conversation_uc = session_data['conversation_uc']
+                    conversation_uc.set_model_and_tokenizer(model, tokenizer)
+
+                # Notify client that model is ready
+                self.socketio.emit('model_initialized',
+                                   {'status': 'success'},
+                                   room=session_id)
+
+                # Remove thread reference
+                if session_id in self.model_initialization_threads:
+                    del self.model_initialization_threads[session_id]
+
+            except Exception as e:
+                print(f"Error initializing model: {str(e)}")
+                import traceback
+                traceback.print_exc()
+
+                # Notify client of error
+                self.socketio.emit('model_initialized',
+                                   {'status': 'error', 'message': f'Error initializing model: {str(e)}'},
+                                   room=session_id)
+
+                # Remove thread reference
+                if session_id in self.model_initialization_threads:
+                    del self.model_initialization_threads[session_id]
+
+        # Start model initialization in a separate thread
+        thread = threading.Thread(target=initialize_task)
+        thread.daemon = True
+        thread.start()
+
+        # Store thread reference
+        self.model_initialization_threads[session_id] = thread
+
+        print(f"Started model initialization thread {thread.name} for session {session_id}")
 
     def _process_message_async(self, session_id, conversation_uc, message, code_content):
         """Process the message in a separate thread."""

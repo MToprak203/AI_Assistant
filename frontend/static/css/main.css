@@ -10,6 +10,7 @@
 @import 'components/message.css';
 @import 'components/file-upload.css';
 @import 'components/toast.css';
+@import 'components/loading.css';
 
 /* Utility styles */
 @import 'utils/animations.css';
