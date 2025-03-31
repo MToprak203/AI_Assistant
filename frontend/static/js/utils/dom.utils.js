@@ -121,16 +121,49 @@ const DomUtils = (function () {
         /**
          * Create and show a toast message
          * @param {string} message - Toast message
+         * @param {string} [type] - Toast type ('success', 'warning', 'error')
          * @param {number} [duration] - Duration in milliseconds
          */
-        showToast: function (message, duration = AppConfig.getUiConfig('toastDurationMs')) {
+        showToast: function (message, type = 'success', duration = AppConfig.getUiConfig('toastDurationMs')) {
+            // Clean up any existing toasts to prevent overlapping
+            const existingToasts = document.querySelectorAll('.toast');
+            existingToasts.forEach(toast => {
+                this.removeElement(toast);
+            });
+
+            // Create the toast with the appropriate class based on type
             const toast = this.createElement('div', {}, 'toast');
+
+            // Add type-specific class
+            if (type === 'error') {
+                toast.classList.add('toast-error');
+            } else if (type === 'warning') {
+                toast.classList.add('toast-warning');
+            } else {
+                toast.classList.add('toast-success');
+            }
+
+            // Set the message
             toast.textContent = message;
 
+            // Add to the document
             document.body.appendChild(toast);
 
+            // Force layout reflow to enable animation
+            toast.offsetHeight;
+
+            // Add animation class
+            toast.classList.add('animate-toast');
+
+            // Set timeout to remove the toast
             setTimeout(() => {
-                this.removeElement(toast);
+                // Add fade-out class
+                toast.classList.add('toast-fade-out');
+
+                // Remove after animation completes
+                setTimeout(() => {
+                    this.removeElement(toast);
+                }, 300);
             }, duration);
         },
 

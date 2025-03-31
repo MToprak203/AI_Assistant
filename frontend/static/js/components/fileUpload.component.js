@@ -74,6 +74,13 @@ const FileUploadComponent = (function() {
     const handleMultiFileChange = function(event) {
         if (event.target.files.length > 0) {
             const files = Array.from(event.target.files);
+            console.log(`Selected ${files.length} files for upload`);
+
+            // Show a loading toast for large projects
+            if (files.length > 5) {
+                DomUtils.showToast(`Processing ${files.length} files...`, 'warning', 2000);
+            }
+
             uploadMultipleFiles(files);
         }
     };
@@ -95,7 +102,25 @@ const FileUploadComponent = (function() {
      * @param {Array<File>} files - Files to upload
      */
     const uploadMultipleFiles = function(files) {
-        FileService.uploadMultipleFiles(files)
+        // Maintain directory structure by extracting relative paths
+        const filePaths = new Map();
+
+        // First, process all files to extract their paths
+        files.forEach(file => {
+            // Get the directory path (if any) from the webkitRelativePath
+            let relativePath = '';
+            if (file.webkitRelativePath) {
+                // Extract the directory structure without the filename
+                const pathParts = file.webkitRelativePath.split('/');
+                pathParts.pop(); // Remove the filename
+                relativePath = pathParts.join('/');
+            }
+
+            filePaths.set(file, relativePath);
+        });
+
+        // Now upload the files
+        FileService.uploadMultipleFiles(files, filePaths)
             .catch(error => {
                 console.error('Multi-upload error:', error);
                 // Error handling is done in the observer
@@ -348,35 +373,52 @@ const FileUploadComponent = (function() {
      * @param {Object} data - Event data with files array
      */
     const handleMultiUploadSuccess = function(data) {
-        // Show success message
-        DomUtils.showToast(`Uploaded ${data.files.length} files`);
+        // Extract file counts from the response
+        const processedCount = data.processed || data.count || (data.files ? data.files.length : 0);
+        const skippedCount = data.skipped || 0;
 
-        // Add files to project
-        data.files.forEach(file => {
-            const originalName = file.originalName || file.filename;
-            const existingIndex = projectFiles.findIndex(f => f.filename === originalName);
-            if (existingIndex !== -1) {
-                projectFiles[existingIndex] = {
-                    filename: originalName,
-                    path: file.filePath
-                };
-            } else {
-                projectFiles.push({
-                    filename: originalName,
-                    path: file.filePath
-                });
-            }
-        });
-
-        // Set primary file to the first one if none is set
-        if (!primaryFile && projectFiles.length > 0) {
-            primaryFile = projectFiles[0].filename;
+        // Build an appropriate message
+        let message = `Uploaded ${processedCount} code files`;
+        if (skippedCount > 0) {
+            message += ` (skipped ${skippedCount} non-code files)`;
         }
 
-        // Update project files list
-        updateProjectFilesList();
+        // Show success message with appropriate type
+        if (processedCount > 0) {
+            DomUtils.showToast(message, 'success');
+        } else if (skippedCount > 0) {
+            DomUtils.showToast(`No code files uploaded. Skipped ${skippedCount} non-code files.`, 'warning');
+        }
 
-        // Publish event
+        // Only process files if there are any
+        if (data.files && data.files.length > 0) {
+            // Add files to project
+            data.files.forEach(file => {
+                const originalName = file.originalName || file.filename;
+                const existingIndex = projectFiles.findIndex(f => f.filename === originalName);
+                if (existingIndex !== -1) {
+                    projectFiles[existingIndex] = {
+                        filename: originalName,
+                        path: file.filePath
+                    };
+                } else {
+                    projectFiles.push({
+                        filename: originalName,
+                        path: file.filePath
+                    });
+                }
+            });
+
+            // Set primary file to the first one if none is set
+            if (!primaryFile && projectFiles.length > 0) {
+                primaryFile = projectFiles[0].filename;
+            }
+
+            // Update project files list in the UI
+            updateProjectFilesList();
+        }
+
+        // Publish event for other components
         EventUtils.publish('projectFilesUploaded', data);
     };
 

@@ -48,115 +48,132 @@
     <link rel="stylesheet" href="../static/css/main.css">
 </head>
 <body>
-    <header class="header">
-        <h1 class="header-title">AI Code Assistant</h1>
-    </header>
+<header class="header">
+    <h1 class="header-title">AI Code Assistant</h1>
+</header>
 
-    <main class="main-container">
-        <div class="flex h-full gap-4 relative">
-            <!-- Project files sidebar -->
-            <div id="project-files-container" class="w-64 bg-white rounded-lg shadow-md overflow-hidden hidden">
-                <div class="bg-indigo-600 text-white px-4 py-2 flex justify-between items-center">
-                    <h2 class="text-sm font-semibold">Project Files</h2>
-                    <button id="collapse-files-btn" class="text-white hover:text-indigo-200" title="Hide project files">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                        </svg>
-                    </button>
-                </div>
-                <div id="project-files-list" class="overflow-y-auto max-h-96 px-2 py-2">
-                    <!-- Project files will be listed here -->
+<main class="main-container">
+    <div class="flex h-full gap-4 relative">
+        <!-- Project files sidebar -->
+        <div id="project-files-container" class="w-64 bg-white rounded-lg shadow-md overflow-hidden hidden">
+            <div class="bg-indigo-600 text-white px-4 py-2 flex justify-between items-center">
+                <h2 class="text-sm font-semibold">Project Files</h2>
+                <button id="collapse-files-btn" class="text-white hover:text-indigo-200" title="Hide project files">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                         stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+                    </svg>
+                </button>
+            </div>
+            <div id="project-files-list" class="overflow-y-auto max-h-96 px-2 py-2">
+                <!-- Project files will be listed here -->
+            </div>
+        </div>
+
+        <!-- Expand button (outside the sidebar) -->
+        <button id="expand-files-btn" class="hidden" title="Show project files">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                 stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
+            </svg>
+        </button>
+
+        <!-- Main chat area -->
+        <div class="flex-1 flex flex-col">
+            <div id="messages" class="messages-container">
+                <!-- Messages will be added here -->
+                <div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="empty-state-icon h-12 w-12" fill="none"
+                         viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                              d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    <h2 class="empty-state-title">Welcome to AI Code Assistant</h2>
+                    <p class="empty-state-description">Ask questions about coding, request refactoring suggestions, or
+                        upload code files for analysis.</p>
                 </div>
             </div>
 
-            <!-- Expand button (outside the sidebar) -->
-            <button id="expand-files-btn" class="hidden" title="Show project files">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-                </svg>
-            </button>
-
-            <!-- Main chat area -->
-            <div class="flex-1 flex flex-col">
-                <div id="messages" class="messages-container">
-                    <!-- Messages will be added here -->
-                    <div class="empty-state">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="empty-state-icon h-12 w-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                        </svg>
-                        <h2 class="empty-state-title">Welcome to AI Code Assistant</h2>
-                        <p class="empty-state-description">Ask questions about coding, request refactoring suggestions, or upload code files for analysis.</p>
-                    </div>
-                </div>
-
-                <div class="input-container">
-                    <div id="file-upload-container" class="file-upload-container">
-                        <div class="flex space-x-2">
-                            <!-- Single file upload -->
-                            <div class="relative">
-                                <input type="file" id="file-upload" class="file-input" accept=".java,.py,.js,.html,.css,.ts,.jsx,.tsx">
-                                <button id="upload-btn" class="upload-button">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="upload-button-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                                    </svg>
-                                    <span>Upload File</span>
-                                </button>
-                            </div>
-
-                            <!-- Multiple file upload -->
-                            <div class="relative">
-                                <input type="file" id="multi-file-upload" class="file-input" accept=".java,.py,.js,.html,.css,.ts,.jsx,.tsx" multiple>
-                                <button id="multi-upload-btn" class="upload-button">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="upload-button-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                    </svg>
-                                    <span>Upload Project</span>
-                                </button>
-                            </div>
+            <div class="input-container">
+                <div id="file-upload-container" class="file-upload-container">
+                    <div class="flex space-x-2">
+                        <!-- Single file upload -->
+                        <div class="relative">
+                            <input type="file" id="file-upload" class="file-input"
+                                   accept=".java,.py,.js,.html,.css,.ts,.jsx,.tsx">
+                            <button id="upload-btn" class="upload-button">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="upload-button-icon h-5 w-5" fill="none"
+                                     viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
+                                </svg>
+                                <span>Upload File</span>
+                            </button>
                         </div>
 
-                        <div id="file-info" class="file-info hidden">
-                            <span id="file-name" class="file-name"></span>
-                            <button id="clear-file" class="clear-file-button">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        <!-- Project folder upload -->
+                        <div class="relative">
+                            <input type="file" id="multi-file-upload" class="file-input"
+                                   accept=".java,.py,.js,.html,.css,.ts,.jsx,.tsx" multiple webkitdirectory directory>
+                            <button id="multi-upload-btn" class="upload-button">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="upload-button-icon h-5 w-5" fill="none"
+                                     viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                          d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
+                                <span>Upload Project</span>
                             </button>
                         </div>
                     </div>
 
-                    <div id="message-input-container" class="message-input-container">
-                        <textarea id="message-input" class="message-input" placeholder="Type your message here..." rows="3"></textarea>
-                        <button id="send-btn" class="send-button">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="send-button-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    <div id="file-info" class="file-info hidden">
+                        <span id="file-name" class="file-name"></span>
+                        <button id="clear-file" class="clear-file-button">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                 stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                      d="M6 18L18 6M6 6l12 12"/>
                             </svg>
                         </button>
                     </div>
                 </div>
+
+                <div id="message-input-container" class="message-input-container">
+                    <textarea id="message-input" class="message-input" placeholder="Type your message here..."
+                              rows="3"></textarea>
+                    <button id="send-btn" class="send-button">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="send-button-icon" fill="none" viewBox="0 0 24 24"
+                             stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
         </div>
-    </main>
+    </div>
+</main>
 
-    <!-- Load our modular JavaScript files -->
-    <script src="../static/js/config.js"></script>
+<!-- Load our modular JavaScript files -->
+<script src="../static/js/config.js"></script>
 
-    <!-- Services -->
-    <script src="../static/js/services/api.service.js"></script>
-    <script src="../static/js/services/socket.service.js"></script>
-    <script src="../static/js/services/file.service.js"></script>
+<!-- Services -->
+<script src="../static/js/services/api.service.js"></script>
+<script src="../static/js/services/socket.service.js"></script>
+<script src="../static/js/services/file.service.js"></script>
 
-    <!-- Utils -->
-    <script src="../static/js/utils/dom.utils.js"></script>
-    <script src="../static/js/utils/markdown.utils.js"></script>
-    <script src="../static/js/utils/event.utils.js"></script>
+<!-- Utils -->
+<script src="../static/js/utils/dom.utils.js"></script>
+<script src="../static/js/utils/markdown.utils.js"></script>
+<script src="../static/js/utils/event.utils.js"></script>
 
-    <!-- Components -->
-    <script src="../static/js/components/message.component.js"></script>
-    <script src="../static/js/components/fileUpload.component.js"></script>
-    <script src="../static/js/components/chat.component.js"></script>
+<!-- Components -->
+<script src="../static/js/components/message.component.js"></script>
+<script src="../static/js/components/fileUpload.component.js"></script>
+<script src="../static/js/components/chat.component.js"></script>
 
-    <!-- Main app -->
-    <script src="../static/js/app.js"></script>
+<!-- Main app -->
+<script src="../static/js/app.js"></script>
 </body>
 </html>

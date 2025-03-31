@@ -61,15 +61,21 @@ const FileService = (function() {
          * @param {Array<File>} files - Array of files to upload
          * @returns {Promise<Object>} Promise resolving to upload results
          */
-        uploadMultipleFiles: async function(files) {
+        uploadMultipleFiles: async function(files, filePaths = new Map()) {
             try {
                 // Notify observers that upload has started
                 notifyObservers('onUploadStart', { fileName: `${files.length} files` });
 
                 // Create form data with multiple files
                 const formData = new FormData();
+
+                // Add each file with its path information
                 files.forEach(file => {
                     formData.append('files[]', file);
+                    // Add the relative path if available
+                    if (filePaths.has(file) && filePaths.get(file)) {
+                        formData.append('paths[]', filePaths.get(file));
+                    }
                 });
 
                 // Call API to upload multiple files
@@ -82,7 +88,9 @@ const FileService = (function() {
                 // Notify observers of successful upload
                 notifyObservers('onMultiUploadSuccess', {
                     files: response.files,
-                    count: response.count
+                    count: response.count,
+                    processed: response.processed,
+                    skipped: response.skipped
                 });
 
                 return response;

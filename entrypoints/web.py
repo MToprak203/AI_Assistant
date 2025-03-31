@@ -161,7 +161,7 @@ class WebApp:
 
         @self.app.route('/api/upload/multiple', methods=['POST'])
         def upload_multiple_files():
-            """Handle multiple file uploads as a project."""
+            """Handle multiple file uploads as a project, preserving directory structure."""
             if 'files[]' not in request.files:
                 return jsonify({'error': 'No files in request'}), 400
 
@@ -184,40 +184,44 @@ class WebApp:
 
                 conversation_uc = session_data['conversation_uc']
 
-                # Save all files and add to project
-                results = []
-                for file in files:
-                    if file.filename == '':
-                        continue  # Skip empty files
+                # Check for directory structure info
+                paths = request.form.getlist('paths[]')
+                if paths:
+                    print(f"Received {len(paths)} directory paths for {len(files)} files")
 
+                # Save all code files and add to project
+                upload_result = self.file_adapter.save_multiple_files(files, session_id)
+                saved_files = upload_result.get('saved_files', [])
+                skipped_files = upload_result.get('skipped_files', [])
+
+                if not saved_files:
+                    return jsonify({
+                        'error': 'No code files found to process',
+                        'skipped': len(skipped_files),
+                        'skipped_files': skipped_files
+                    }), 400
+
+                # Add all saved files to the conversation
+                for file_info in saved_files:
                     try:
-                        # Save file
-                        file_path = self.file_adapter.save_uploaded_file(file, session_id)
-
                         # Read content
-                        file_content = self.file_adapter.read_file(file_path)
+                        file_content = self.file_adapter.read_file(file_info['file_path'])
 
                         # Add to project files
-                        conversation_uc.add_project_file(file.filename, file_content)
-
-                        # Track result
-                        results.append({
-                            'file_path': file_path,
-                            'filename': os.path.basename(file_path),
-                            'original_name': file.filename
-                        })
+                        # Use the original_name which includes the directory path
+                        conversation_uc.add_project_file(file_info['original_name'], file_content)
                     except Exception as e:
-                        print(f"Error processing file {file.filename}: {str(e)}")
+                        print(f"Error adding file to project: {str(e)}")
                         # Continue with other files
 
-                if not results:
-                    return jsonify({'error': 'Failed to process any files'}), 400
-
-                # Return information about all uploaded files
+                # Return information about uploaded files
                 return jsonify({
-                    'files': results,
-                    'count': len(results),
-                    'session_id': session_id
+                    'files': saved_files,
+                    'count': len(saved_files),
+                    'processed': len(saved_files),
+                    'skipped': len(skipped_files),
+                    'session_id': session_id,
+                    'message': f"Uploaded {len(saved_files)} code files (skipped {len(skipped_files)} non-code files)"
                 })
             except Exception as e:
                 self.app.logger.error(f"Error uploading multiple files: {str(e)}")

@@ -11,8 +11,9 @@
   border-radius: var(--border-radius-lg);
   box-shadow: var(--shadow-lg);
   z-index: var(--z-index-toast);
-  opacity: 0;
-  transform: translateY(10px);
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 /* Toast success variant */
@@ -20,7 +21,42 @@
   background-color: var(--color-success);
 }
 
+/* Toast warning variant */
+.toast-warning {
+  background-color: #F59E0B; /* Amber-500 */
+}
+
 /* Toast error variant */
 .toast-error {
   background-color: var(--color-error);
+}
+
+/* Toast fade out animation */
+.toast-fade-out {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* Toast animation */
+@keyframes toast-in-out {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  90% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.animate-toast {
+  animation: toast-in-out 3s ease forwards;
 }
