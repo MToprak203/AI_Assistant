@@ -55,6 +55,69 @@ const ApiService = (function() {
             } catch (error) {
                 return errorHandler(error);
             }
+        },
+
+        /**
+         * Upload multiple files
+         * @param {FormData} formData - FormData containing files
+         * @returns {Promise<Object>} Promise resolving to upload results
+         */
+        uploadMultipleFiles: async function(formData) {
+            try {
+                const response = await fetch(AppConfig.getApiEndpoint('multiUpload'), {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                return errorHandler(error);
+            }
+        },
+
+        /**
+         * Get project files
+         * @returns {Promise<Object>} Promise resolving to project files data
+         */
+        getProjectFiles: async function() {
+            try {
+                const response = await fetch(AppConfig.getApiEndpoint('project'), {
+                    method: 'GET'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                return errorHandler(error);
+            }
+        },
+
+        /**
+         * Get content of a specific project file
+         * @param {string} filename - Name of the file to get
+         * @returns {Promise<Object>} Promise resolving to file content
+         */
+        getFileContent: async function(filename) {
+            try {
+                const response = await fetch(`${AppConfig.getApiEndpoint('projectFile')}/${encodeURIComponent(filename)}`, {
+                    method: 'GET'
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                return errorHandler(error);
+            }
         }
     };
 })();

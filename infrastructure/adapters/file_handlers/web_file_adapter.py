@@ -3,6 +3,7 @@ from core.ports.file_handler_port import FileHandlerPort
 from werkzeug.utils import secure_filename
 import os
 import uuid
+from typing import Dict, List
 
 
 class WebFileAdapter(FileHandlerPort):
@@ -12,6 +13,9 @@ class WebFileAdapter(FileHandlerPort):
 
         # Create separate folders for different session files to prevent conflicts
         self.session_upload_folders = {}
+
+        # Track project files by session
+        self.session_files = {}
 
     def read_file(self, path: str) -> str:
         """Read file from disk by path"""
@@ -55,8 +59,65 @@ class WebFileAdapter(FileHandlerPort):
             file_path = os.path.join(upload_folder, filename)
             file.save(file_path)
 
+            # Track this file for the session
+            if session_id:
+                if session_id not in self.session_files:
+                    self.session_files[session_id] = []
+                self.session_files[session_id].append({
+                    'original_name': original_filename,
+                    'path': file_path,
+                    'filename': filename
+                })
+
             print(f"File saved at: {file_path}")
             return file_path
         except Exception as e:
             print(f"Error saving file: {str(e)}")
             raise IOError(f"Failed to save file: {str(e)}")
+
+    def save_multiple_files(self, files, session_id=None) -> List[Dict]:
+        """Save multiple uploaded files and return their details"""
+        if not files or not isinstance(files, list):
+            raise ValueError("No files provided or invalid format")
+
+        results = []
+        for file in files:
+            try:
+                file_path = self.save_uploaded_file(file, session_id)
+                results.append({
+                    'file_path': file_path,
+                    'filename': os.path.basename(file_path),
+                    'original_name': file.filename
+                })
+            except Exception as e:
+                print(f"Error saving file '{file.filename}': {str(e)}")
+                # Continue with other files even if one fails
+
+        return results
+
+    def get_session_files(self, session_id) -> List[Dict]:
+        """Get all files uploaded for a specific session"""
+        return self.session_files.get(session_id, [])
+
+    def get_project_structure(self, session_id) -> Dict[str, Dict]:
+        """
+        Get a structured representation of all files in the session
+        Returns a dict with filenames as keys and content + metadata as values
+        """
+        if session_id not in self.session_files:
+            return {}
+
+        project = {}
+        for file_info in self.session_files[session_id]:
+            try:
+                content = self.read_file(file_info['path'])
+                project[file_info['original_name']] = {
+                    'content': content,
+                    'path': file_info['path'],
+                    'size': os.path.getsize(file_info['path'])
+                }
+            except Exception as e:
+                print(f"Error loading file {file_info['path']}: {str(e)}")
+                # Skip files that can't be read
+
+        return project

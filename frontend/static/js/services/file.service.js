@@ -44,7 +44,45 @@ const FileService = (function() {
                 // Notify observers of successful upload
                 notifyObservers('onUploadSuccess', {
                     filePath: currentFilePath,
-                    fileName: currentFileName
+                    fileName: currentFileName,
+                    originalName: file.name
+                });
+
+                return response;
+            } catch (error) {
+                // Notify observers of upload error
+                notifyObservers('onUploadError', { error: error.message });
+                throw error;
+            }
+        },
+
+        /**
+         * Upload multiple files
+         * @param {Array<File>} files - Array of files to upload
+         * @returns {Promise<Object>} Promise resolving to upload results
+         */
+        uploadMultipleFiles: async function(files) {
+            try {
+                // Notify observers that upload has started
+                notifyObservers('onUploadStart', { fileName: `${files.length} files` });
+
+                // Create form data with multiple files
+                const formData = new FormData();
+                files.forEach(file => {
+                    formData.append('files[]', file);
+                });
+
+                // Call API to upload multiple files
+                const response = await ApiService.uploadMultipleFiles(formData);
+
+                if (response.error) {
+                    throw new Error(response.error);
+                }
+
+                // Notify observers of successful upload
+                notifyObservers('onMultiUploadSuccess', {
+                    files: response.files,
+                    count: response.count
                 });
 
                 return response;

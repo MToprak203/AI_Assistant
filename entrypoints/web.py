@@ -139,89 +139,392 @@ class WebApp:
                 # Save the file
                 file_path = self.file_adapter.save_uploaded_file(file, session_id)
 
+                # Get the content of the file
+                file_content = self.file_adapter.read_file(file_path)
+
+                # Add to conversation use case project files
+                session_data = self.session_manager.get_session(session_id)
+                if session_data and 'conversation_uc' in session_data:
+                    conversation_uc = session_data['conversation_uc']
+                    conversation_uc.add_project_file(os.path.basename(file.filename), file_content)
+
                 # Return file info along with session ID
                 return jsonify({
                     'file_path': file_path,
                     'filename': os.path.basename(file_path),
+                    'original_name': file.filename,
                     'session_id': session_id
                 })
             except Exception as e:
                 self.app.logger.error(f"Error uploading file: {str(e)}")
                 return jsonify({'error': str(e)}), 500
 
+        @self.app.route('/api/upload/multiple', methods=['POST'])
+        def upload_multiple_files():
+            """Handle multiple file uploads as a project."""
+            if 'files[]' not in request.files:
+                return jsonify({'error': 'No files in request'}), 400
+
+            files = request.files.getlist('files[]')
+            if not files or len(files) == 0:
+                return jsonify({'error': 'No files selected'}), 400
+
+            try:
+                # Get current session ID from the Flask session
+                session_id = flask_session.get('chat_session_id')
+                print(f"Processing multiple file upload for session: {session_id}")
+
+                # Ensure we have a valid session
+                if not session_id:
+                    return jsonify({'error': 'No active session'}), 400
+
+                session_data = self.session_manager.get_session(session_id)
+                if not session_data or 'conversation_uc' not in session_data:
+                    return jsonify({'error': 'Invalid session'}), 400
+
+                conversation_uc = session_data['conversation_uc']
+
+                # Save all files and add to project
+                results = []
+                for file in files:
+                    if file.filename == '':
+                        continue  # Skip empty files
+
+                    try:
+                        # Save file
+                        file_path = self.file_adapter.save_uploaded_file(file, session_id)
+
+                        # Read content
+                        file_content = self.file_adapter.read_file(file_path)
+
+                        # Add to project files
+                        conversation_uc.add_project_file(file.filename, file_content)
+
+                        # Track result
+                        results.append({
+                            'file_path': file_path,
+                            'filename': os.path.basename(file_path),
+                            'original_name': file.filename
+                        })
+                    except Exception as e:
+                        print(f"Error processing file {file.filename}: {str(e)}")
+                        # Continue with other files
+
+                if not results:
+                    return jsonify({'error': 'Failed to process any files'}), 400
+
+                # Return information about all uploaded files
+                return jsonify({
+                    'files': results,
+                    'count': len(results),
+                    'session_id': session_id
+                })
+            except Exception as e:
+                self.app.logger.error(f"Error uploading multiple files: {str(e)}")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/project', methods=['GET'])
+        def get_project_files():
+            """Get information about all project files in the current session."""
+            session_id = flask_session.get('chat_session_id')
+            if not session_id:
+                return jsonify({'error': 'No active session'}), 400
+
+            try:
+                session_data = self.session_manager.get_session(session_id)
+                if not session_data or 'conversation_uc' not in session_data:
+                    return jsonify({'error': 'Invalid session'}), 400
+
+                conversation_uc = session_data['conversation_uc']
+                project_files = conversation_uc.get_project_files()
+
+                # Format response
+                files = []
+                for filename, project_file in project_files.items():
+                    files.append({
+                        'filename': filename,
+                        'description': project_file.description,
+                        'size': len(project_file.content)
+                    })
+
+                return jsonify({
+                    'files': files,
+                    'count': len(files),
+                    'session_id': session_id
+                })
+            except Exception as e:
+                self.app.logger.error(f"Error getting project files: {str(e)}")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/project/file/<path:filename>', methods=['GET'])
+        def get_project_file(filename):
+            """Get content of a specific project file."""
+            session_id = flask_session.get('chat_session_id')
+            if not session_id:
+                return jsonify({'error': 'No active session'}), 400
+
+            try:
+                session_data = self.session_manager.get_session(session_id)
+                if not session_data or 'conversation_uc' not in session_data:
+                    return jsonify({'error': 'Invalid session'}), 400
+
+                conversation_uc = session_data['conversation_uc']
+                content = conversation_uc.get_file_content(filename)
+
+                if content is None:
+                    return jsonify({'error': 'File not found'}), 404
+
+                return jsonify({
+                    'filename': filename,
+                    'content': content
+                })
+            except Exception as e:
+                self.app.logger.error(f"Error getting file content: {str(e)}")
+                return jsonify({'error': str(e)}), 500
+
+    # entrypoints/web.py - Socket Event Handlers
+
     def _register_socket_events(self):
-        """Register socket.io event handlers."""
+        """Register all Socket.IO event handlers for the web application."""
 
         @self.socketio.on('connect')
         def handle_connect():
-            """Handle client connection."""
+            """Handle new client connections."""
             print('Client connected')
+
+        @self.socketio.on('disconnect')
+        def handle_disconnect():
+            """Handle client disconnections."""
+            print('Client disconnected')
 
         @self.socketio.on('join_session')
         def handle_join_session(data):
-            """Join a specific chat session room."""
+            """
+            Handle a client joining a specific chat session.
+            Creates a Socket.IO room for the session.
+            """
             session_id = data.get('session_id')
 
-            if session_id and self.session_manager.get_session(session_id):
-                join_room(session_id)
-                # Store the session ID in the Flask session
-                flask_session['chat_session_id'] = session_id
-                emit('session_joined', {'status': 'success'})
+            if not session_id:
+                emit('session_joined', {'status': 'error', 'message': 'Missing session ID'})
+                return
 
-                # Send current model status
-                if self.model_manager.is_initialized():
-                    emit('model_initialized', {'status': 'success'})
-                else:
-                    # If initialization is in progress
-                    if session_id in self.model_initialization_threads:
-                        thread = self.model_initialization_threads[session_id]
-                        if thread and thread.is_alive():
-                            emit('model_status', {'status': 'loading', 'message': 'Loading AI model...'})
-                    else:
-                        # Start model initialization if not already started
-                        self._initialize_model_async(session_id)
-            else:
+            # Check if session exists
+            session_data = self.session_manager.get_session(session_id)
+            if not session_data:
                 emit('session_joined', {'status': 'error', 'message': 'Invalid session'})
+                return
+
+            # Join the Socket.IO room for this session
+            join_room(session_id)
+
+            # Store the session ID in the Flask session
+            flask_session['chat_session_id'] = session_id
+
+            # Tell client they've successfully joined
+            emit('session_joined', {'status': 'success'})
+
+            # Send current model status to the client
+            if self.model_manager.is_initialized():
+                emit('model_initialized', {'status': 'success'})
+            else:
+                # Check if initialization is already in progress
+                if session_id in self.model_initialization_threads:
+                    thread = self.model_initialization_threads[session_id]
+                    if thread and thread.is_alive():
+                        emit('model_status', {
+                            'status': 'loading',
+                            'message': 'Loading AI model...'
+                        })
+                else:
+                    # Start model initialization
+                    self._initialize_model_async(session_id)
 
         @self.socketio.on('user_message')
         def handle_message(data):
-            """Handle incoming user message."""
+            """
+            Handle user messages and file operations.
+
+            Parameters:
+            - data: Dictionary containing message details:
+              - session_id: The session identifier
+              - message: The text message from the user
+              - file_path: Optional path to a file being uploaded/shared
+              - file_focus: Optional filename to focus on in the project
+            """
+            # Log and validate the incoming message
             print(f"Received message: {data}")
+
+            # Extract data from request
             session_id = data.get('session_id')
             message = data.get('message')
-            file_path = data.get('file_path')
+            file_path = data.get('file_path')  # Optional file path if a file was uploaded
+            file_focus = data.get('file_focus')  # Optional filename to focus on
 
+            # Validate required fields
             if not session_id or not message:
-                print("Invalid request parameters")
+                print("Invalid request: missing session_id or message")
                 emit('error', {'message': 'Invalid request parameters'})
                 return
 
+            # Get session data
             session_data = self.session_manager.get_session(session_id)
             if not session_data:
                 print(f"Invalid session: {session_id}")
                 emit('error', {'message': 'Invalid session'})
                 return
 
-            print(f"Session data: {session_data.keys()}")
-            conversation_uc = session_data['conversation_uc']
+            # Get conversation use case for this session
+            conversation_uc = session_data.get('conversation_uc')
+            if not conversation_uc:
+                print(f"Missing conversation use case for session: {session_id}")
+                emit('error', {'message': 'Session configuration error'})
+                return
 
-            # Process file if provided
+            # Process uploaded file if provided
             code_content = None
             if file_path:
                 try:
                     print(f"Reading file: {file_path}")
-                    code_content = self.file_adapter.read_file(file_path)
+                    file_content = self.file_adapter.read_file(file_path)
+
+                    # Get filename from path
+                    filename = os.path.basename(file_path)
+
+                    # Create code dict with both filename and content
+                    code_content = {
+                        'filename': filename,
+                        'content': file_content
+                    }
                 except Exception as e:
                     print(f"Error reading file: {str(e)}")
                     emit('error', {'message': f'Error reading file: {str(e)}'})
                     return
 
-            # Emit message receipt acknowledgment
-            print("Emitting processing status")
+            # Change focus to a specific file if requested
+            if file_focus:
+                try:
+                    success = conversation_uc.set_primary_file(file_focus)
+                    if success:
+                        print(f"Set focus to file: {file_focus}")
+                    else:
+                        print(f"Failed to set focus to file: {file_focus} (file not found)")
+                except Exception as e:
+                    print(f"Error setting file focus: {str(e)}")
+                    # Continue processing even if focus setting fails
+
+            # Tell client we've received the message and are processing
             emit('message_received', {'status': 'processing'})
 
-            # Process in a separate thread to not block the server
+            # Process message in a separate thread to avoid blocking
             self._process_message_async(session_id, conversation_uc, message, code_content)
+
+        @self.socketio.on('project_update')
+        def handle_project_update(data):
+            """
+            Handle project file operations like focusing on a file or removing a file.
+
+            Parameters:
+            - data: Dictionary containing:
+              - session_id: The session identifier
+              - action: The action to perform ('focus' or 'remove')
+              - filename: The name of the file to operate on
+            """
+            session_id = data.get('session_id')
+            action = data.get('action')
+            filename = data.get('filename')
+
+            # Validate required parameters
+            if not session_id or not action or not filename:
+                emit('error', {'message': 'Invalid request parameters'})
+                return
+
+            # Get session data
+            session_data = self.session_manager.get_session(session_id)
+            if not session_data or 'conversation_uc' not in session_data:
+                emit('error', {'message': 'Invalid session'})
+                return
+
+            # Get conversation use case
+            conversation_uc = session_data['conversation_uc']
+
+            try:
+                result = False
+                message = ""
+
+                if action == 'focus':
+                    # Set focus to a specific file
+                    result = conversation_uc.set_primary_file(filename)
+                    message = f"Now focusing on {filename}" if result else f"File {filename} not found"
+
+                elif action == 'remove':
+                    # Remove a file from the project
+                    result = conversation_uc.remove_project_file(filename)
+                    message = f"Removed {filename}" if result else f"File {filename} not found"
+                else:
+                    message = f"Unsupported action: {action}"
+
+                # Send result back to client
+                emit('project_update_result', {
+                    'success': result,
+                    'message': message,
+                    'action': action,
+                    'filename': filename
+                })
+
+            except Exception as e:
+                print(f"Error in project update: {str(e)}")
+                emit('error', {'message': f'Error updating project: {str(e)}'})
+
+        @self.socketio.on('get_project_files')
+        def handle_get_project_files(data):
+            """
+            Handle request for the current project files.
+
+            Parameters:
+            - data: Dictionary containing:
+              - session_id: The session identifier
+            """
+            session_id = data.get('session_id')
+
+            if not session_id:
+                emit('error', {'message': 'Missing session ID'})
+                return
+
+            # Get session data
+            session_data = self.session_manager.get_session(session_id)
+            if not session_data or 'conversation_uc' not in session_data:
+                emit('error', {'message': 'Invalid session'})
+                return
+
+            # Get conversation use case
+            conversation_uc = session_data['conversation_uc']
+
+            try:
+                # Get project files
+                project_files = conversation_uc.get_project_files()
+                primary_file = conversation_uc.primary_file
+
+                # Format response
+                files = []
+                for filename, project_file in project_files.items():
+                    files.append({
+                        'filename': filename,
+                        'description': project_file.description,
+                        'size': len(project_file.content),
+                        'is_primary': filename == primary_file
+                    })
+
+                # Send result back to client
+                emit('project_files', {
+                    'files': files,
+                    'count': len(files),
+                    'primary_file': primary_file
+                })
+
+            except Exception as e:
+                print(f"Error getting project files: {str(e)}")
+                emit('error', {'message': f'Error getting project files: {str(e)}'})
 
     def _initialize_model_async(self, session_id):
         """Initialize model in a separate thread and update the client."""

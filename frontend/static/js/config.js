@@ -9,7 +9,10 @@ const AppConfig = (function() {
         // API endpoints
         apiEndpoints: {
             sessions: '/api/sessions',
-            upload: '/api/upload'
+            upload: '/api/upload',
+            multiUpload: '/api/upload/multiple',
+            project: '/api/project',
+            projectFile: '/api/project/file'
         },
 
         // Socket events
@@ -23,6 +26,7 @@ const AppConfig = (function() {
             assistantChunk: 'assistant_chunk',
             assistantResponse: 'assistant_response',
             assistantResponseComplete: 'assistant_response_complete',
+            projectUpdate: 'project_update',
             error: 'error'
         },
 
@@ -30,7 +34,8 @@ const AppConfig = (function() {
         ui: {
             maxReconnectAttempts: 5,
             reconnectDelayMs: 1000,
-            toastDurationMs: 3000
+            toastDurationMs: 3000,
+            maxProjectFilesPerView: 10
         }
     };
 

@@ -60,6 +60,11 @@ const SocketService = (function() {
             triggerEvent('assistantResponseComplete', data);
         });
 
+        // Project update events
+        socket.on(AppConfig.getSocketEvent('project_update_result'), (data) => {
+            triggerEvent('project_update_result', data);
+        });
+
         // Error events
         socket.on(AppConfig.getSocketEvent('error'), (data) => {
             console.error('Socket error:', data);
@@ -159,9 +164,10 @@ const SocketService = (function() {
          * Send a user message
          * @param {string} message - Message content
          * @param {string|null} filePath - Optional file path
+         * @param {string|null} fileFocus - Optional primary file to focus on
          * @returns {boolean} True if sent, false otherwise
          */
-        sendMessage: function(message, filePath = null) {
+        sendMessage: function(message, filePath = null, fileFocus = null) {
             if (!sessionId) {
                 console.error('No session ID, cannot send message');
                 return false;
@@ -170,8 +176,24 @@ const SocketService = (function() {
             return this.emit(AppConfig.getSocketEvent('userMessage'), {
                 session_id: sessionId,
                 message: message,
-                file_path: filePath
+                file_path: filePath,
+                file_focus: fileFocus
             });
+        },
+
+        /**
+         * Send project update
+         * @param {Object} data - Project update data
+         * @returns {boolean} True if sent, false otherwise
+         */
+        sendProjectUpdate: function(data) {
+            if (!sessionId) {
+                console.error('No session ID, cannot send project update');
+                return false;
+            }
+
+            data.session_id = sessionId;
+            return this.emit(AppConfig.getSocketEvent('projectUpdate'), data);
         },
 
         /**

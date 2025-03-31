@@ -1,0 +1,87 @@
+/* frontend/static/css/components/project-files.css */
+
+/* Project files container */
+#project-files-container {
+  max-width: 16rem;
+  width: 16rem;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+  position: relative;
+}
+
+#project-files-container.collapsed {
+  width: 0 !important;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  opacity: 0;
+}
+
+/* Project files list */
+#project-files-list {
+  max-height: calc(100vh - 15rem);
+  overflow-y: auto;
+}
+
+/* Project file item */
+.project-file-item {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.project-file-item:hover {
+  background-color: #f9fafb;
+}
+
+.project-file-item.active {
+  background-color: #e0e7ff;
+  border-left: 3px solid var(--color-primary);
+}
+
+/* File icon */
+.file-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.5rem;
+  width: 1.5rem;
+}
+
+/* File actions */
+.focus-file-btn, .remove-file-btn {
+  opacity: 0.7;
+  transition: opacity var(--transition-fast);
+}
+
+.focus-file-btn:hover, .remove-file-btn:hover {
+  opacity: 1;
+}
+
+/* Expand button for the sidebar */
+#expand-files-btn {
+  position: fixed;
+  top: 50%;
+  left: 0;
+  width: 30px;
+  height: 30px;
+  background-color: var(--color-primary);
+  color: white;
+  border-radius: 0 4px 4px 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  transform: translateY(-50%);
+  box-shadow: var(--shadow-md);
+  border: none;
+}
+
+#project-files-container.collapsed ~ #expand-files-btn {
+  display: flex;
+}

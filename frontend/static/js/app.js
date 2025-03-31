@@ -7,6 +7,11 @@ const App = (function() {
     // Private properties
     let sessionId = null;
 
+    // UI element references
+    const collapseFilesBtn = DomUtils.getById('collapse-files-btn');
+    const expandFilesBtn = DomUtils.getById('expand-files-btn');
+    const projectFilesContainer = DomUtils.getById('project-files-container');
+
     /**
      * Initialize the application
      */
@@ -15,6 +20,9 @@ const App = (function() {
             // Initialize components
             FileUploadComponent.init();
             ChatComponent.init();
+
+            // Initialize UI event handlers
+            initUIEventHandlers();
 
             // Connect to socket
             SocketService.connect();
@@ -27,6 +35,70 @@ const App = (function() {
         } catch (error) {
             console.error('Failed to initialize application:', error);
             MessageComponent.showError('Failed to initialize: ' + error.message);
+        }
+    };
+
+    /**
+     * Initialize UI event handlers
+     */
+    const initUIEventHandlers = function() {
+        // Handle project files panel collapse
+        if (collapseFilesBtn) {
+            DomUtils.addEvent(collapseFilesBtn, 'click', collapseSidebar);
+        }
+
+        // Handle project files panel expand
+        if (expandFilesBtn) {
+            DomUtils.addEvent(expandFilesBtn, 'click', expandSidebar);
+        }
+
+        // Restore sidebar state
+        restoreSidebarState();
+    };
+
+    /**
+     * Collapse the sidebar
+     */
+    const collapseSidebar = function() {
+        if (projectFilesContainer) {
+            projectFilesContainer.classList.add('collapsed');
+            DomUtils.showElement(expandFilesBtn);
+            // Save state to localStorage
+            localStorage.setItem('sidebar-collapsed', 'true');
+        }
+    };
+
+    /**
+     * Expand the sidebar
+     */
+    const expandSidebar = function() {
+        if (projectFilesContainer) {
+            projectFilesContainer.classList.remove('collapsed');
+            DomUtils.hideElement(expandFilesBtn);
+            // Save state to localStorage
+            localStorage.setItem('sidebar-collapsed', 'false');
+        }
+    };
+
+    /**
+     * Restore sidebar state from localStorage
+     */
+    const restoreSidebarState = function() {
+        const collapsed = localStorage.getItem('sidebar-collapsed');
+
+        if (collapsed === 'true' && projectFilesContainer) {
+            collapseSidebar();
+        } else if (collapsed === 'false' && projectFilesContainer) {
+            expandSidebar();
+        }
+
+        // If there are project files, show the sidebar
+        if (FileUploadComponent.getProjectFiles().length > 0) {
+            DomUtils.showElement(projectFilesContainer);
+            // If it should be collapsed, collapse it
+            if (collapsed === 'true') {
+                collapseSidebar();
+            }
         }
     };
 
@@ -52,6 +124,32 @@ const App = (function() {
         }
     };
 
+    /**
+     * Load project files from API
+     */
+    const loadProjectFiles = async function() {
+        try {
+            const data = await ApiService.getProjectFiles();
+
+            if (data.files && data.files.length > 0) {
+                // Update the UI
+                DomUtils.showElement(projectFilesContainer);
+
+                // Restore collapsed state if needed
+                const collapsed = localStorage.getItem('sidebar-collapsed');
+                if (collapsed === 'true') {
+                    collapseSidebar();
+                }
+
+                // TODO: Process the files
+                console.log('Project files loaded:', data.files);
+            }
+        } catch (error) {
+            console.error('Failed to load project files:', error);
+            // Don't throw, just log it - this is non-critical
+        }
+    };
+
     return {
         /**
          * Initialize the application
@@ -64,6 +162,26 @@ const App = (function() {
          */
         getSessionId: function() {
             return sessionId;
+        },
+
+        /**
+         * Collapse or expand the project files panel
+         * @param {boolean} [collapse] - True to collapse, false to expand, toggle if not provided
+         */
+        toggleProjectFiles: function(collapse) {
+            if (typeof collapse === 'boolean') {
+                if (collapse) {
+                    collapseSidebar();
+                } else {
+                    expandSidebar();
+                }
+            } else {
+                if (projectFilesContainer && projectFilesContainer.classList.contains('collapsed')) {
+                    expandSidebar();
+                } else {
+                    collapseSidebar();
+                }
+            }
         }
     };
 })();

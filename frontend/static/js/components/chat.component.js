@@ -32,6 +32,15 @@ const ChatComponent = (function() {
         EventUtils.subscribe('sessionInitialized', data => {
             console.log('Session initialized:', data);
         });
+
+        // Subscribe to project file events
+        EventUtils.subscribe('fileUploaded', data => {
+            console.log('File uploaded:', data);
+        });
+
+        EventUtils.subscribe('projectFilesUploaded', data => {
+            console.log('Project files uploaded:', data);
+        });
     };
 
     /**
@@ -101,6 +110,16 @@ const ChatComponent = (function() {
             currentStreamingMessage = null;
         });
 
+        SocketService.on('project_update_result', (data) => {
+            console.log('Project update result:', data);
+            // Show toast with the result message
+            if (data.success) {
+                DomUtils.showToast(data.message);
+            } else {
+                DomUtils.showError(data.message);
+            }
+        });
+
         SocketService.on('error', (data) => {
             isProcessing = false;
             MessageComponent.removeProcessingIndicator();
@@ -137,8 +156,11 @@ const ChatComponent = (function() {
         // Get file path if a file is uploaded
         const filePath = FileUploadComponent.getFilePath();
 
+        // Get primary file if available
+        const primaryFile = FileUploadComponent.getPrimaryFile();
+
         // Send message via socket
-        SocketService.sendMessage(message, filePath);
+        SocketService.sendMessage(message, filePath, primaryFile);
     };
 
     return {
