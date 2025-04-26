@@ -64,6 +64,10 @@ class WebApp:
     def _register_routes(self):
         """Register all HTTP routes."""
 
+        @self.app.route('/api/health-check', methods=['GET'])
+        def health_check():
+            return jsonify({"status": "ok"})
+
         @self.app.route('/')
         def index():
             """Render the main chat interface."""

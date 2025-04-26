@@ -1,137 +1,252 @@
 // frontend/static/js/components/fileUpload.component.js
 
 /**
- * Component for handling file uploads
+ * Component for handling project files in Electron environment
  */
 const FileUploadComponent = (function() {
     // Private properties
-    const fileUploadInput = DomUtils.getById('file-upload');
-    const multiFileUploadInput = DomUtils.getById('multi-file-upload');
-    const uploadButton = DomUtils.getById('upload-btn');
-    const multiUploadButton = DomUtils.getById('multi-upload-btn');
-    const fileInfo = DomUtils.getById('file-info');
-    const fileName = DomUtils.getById('file-name');
-    const clearFileBtn = DomUtils.getById('clear-file');
     const projectFilesContainer = DomUtils.getById('project-files-container');
     const projectFilesList = DomUtils.getById('project-files-list');
 
     // Track project files
     let projectFiles = [];
-    let currentFilePath = null;
-    let currentFileName = null;
     let primaryFile = null;
+    let currentProjectPath = null;
 
     /**
      * Initialize the component
      */
     const init = function() {
-        // Setup event listeners
-        DomUtils.addEvent(fileUploadInput, 'change', handleFileChange);
-        DomUtils.addEvent(multiFileUploadInput, 'change', handleMultiFileChange);
-        DomUtils.addEvent(uploadButton, 'click', triggerFileDialog);
-        DomUtils.addEvent(multiUploadButton, 'click', triggerMultiFileDialog);
-        DomUtils.addEvent(clearFileBtn, 'click', clearFile);
+        // Add electron-specific project loader button if running in Electron
+        if (ElectronService.isElectron()) {
+            addProjectLoaderButton();
+        } else {
+            // If not in Electron, show a message that desktop functionality is limited
+            DomUtils.showToast('For full project access, use the desktop application', 'info', 5000);
+        }
 
-        // Register as observer for FileService events
-        FileService.addObserver({
-            onUploadStart: handleUploadStart,
-            onUploadSuccess: handleUploadSuccess,
-            onUploadError: handleUploadError,
-            onFileClear: handleFileClear,
-            onMultiUploadSuccess: handleMultiUploadSuccess
+        // Setup expand/collapse functionality for project files sidebar
+        setupSidebarToggle();
+
+        // Register as observer for events
+        EventUtils.subscribe('sessionInitialized', data => {
+            console.log('Session initialized:', data);
+
+            // If we have an existing project, reload it
+            if (currentProjectPath && ElectronService.isElectron()) {
+                reloadProject(currentProjectPath);
+            }
         });
     };
 
     /**
-     * Trigger file input dialog
+     * Add a project folder button for Electron
      */
-    const triggerFileDialog = function() {
-        fileUploadInput.click();
-    };
+    const addProjectLoaderButton = function() {
+        // Create a button container
+        const buttonContainer = DomUtils.createElement('div', {}, 'flex space-x-2');
 
-    /**
-     * Trigger multi-file input dialog
-     */
-    const triggerMultiFileDialog = function() {
-        multiFileUploadInput.click();
-    };
+        // Create a new button for loading entire projects
+        const projectBtn = DomUtils.createElement('button', {
+            id: 'load-project-btn',
+            title: 'Load Project Folder'
+        }, 'upload-button');
 
-    /**
-     * Handle file selection
-     * @param {Event} event - Change event
-     */
-    const handleFileChange = function(event) {
-        if (event.target.files.length > 0) {
-            const file = event.target.files[0];
-            uploadFile(file);
+        projectBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" class="upload-button-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
+            <span>Load Project</span>
+        `;
+
+        // Add click handler
+        DomUtils.addEvent(projectBtn, 'click', handleProjectLoad);
+
+        // Add the button to the container
+        DomUtils.appendChild(buttonContainer, projectBtn);
+
+        // Add the button container to the upload container
+        const uploadContainer = DomUtils.getById('file-upload-container');
+        if (uploadContainer) {
+            // Clear existing content
+            DomUtils.setHtml(uploadContainer, '');
+            DomUtils.appendChild(uploadContainer, buttonContainer);
         }
     };
 
     /**
-     * Handle multiple file selection
-     * @param {Event} event - Change event
+     * Set up sidebar toggle functionality
      */
-    const handleMultiFileChange = function(event) {
-        if (event.target.files.length > 0) {
-            const files = Array.from(event.target.files);
-            console.log(`Selected ${files.length} files for upload`);
+    const setupSidebarToggle = function() {
+        const collapseFilesBtn = DomUtils.getById('collapse-files-btn');
+        const expandFilesBtn = DomUtils.getById('expand-files-btn');
 
-            // Show a loading toast for large projects
-            if (files.length > 5) {
-                DomUtils.showToast(`Processing ${files.length} files...`, 'warning', 2000);
+        if (collapseFilesBtn) {
+            DomUtils.addEvent(collapseFilesBtn, 'click', collapseSidebar);
+        }
+
+        if (expandFilesBtn) {
+            DomUtils.addEvent(expandFilesBtn, 'click', expandSidebar);
+        }
+
+        // Restore previous state from localStorage
+        restoreSidebarState();
+    };
+
+    /**
+     * Collapse the sidebar
+     */
+    const collapseSidebar = function() {
+        if (projectFilesContainer) {
+            projectFilesContainer.classList.add('collapsed');
+            const expandBtn = DomUtils.getById('expand-files-btn');
+            if (expandBtn) {
+                DomUtils.showElement(expandBtn);
             }
-
-            uploadMultipleFiles(files);
+            // Save state to localStorage
+            localStorage.setItem('sidebar-collapsed', 'true');
         }
     };
 
     /**
-     * Upload a file
-     * @param {File} file - File to upload
+     * Expand the sidebar
      */
-    const uploadFile = function(file) {
-        FileService.uploadFile(file)
-            .catch(error => {
-                console.error('Upload error:', error);
-                // Error handling is done in the observer
-            });
+    const expandSidebar = function() {
+        if (projectFilesContainer) {
+            projectFilesContainer.classList.remove('collapsed');
+            const expandBtn = DomUtils.getById('expand-files-btn');
+            if (expandBtn) {
+                DomUtils.hideElement(expandBtn);
+            }
+            // Save state to localStorage
+            localStorage.setItem('sidebar-collapsed', 'false');
+        }
     };
 
     /**
-     * Upload multiple files
-     * @param {Array<File>} files - Files to upload
+     * Restore sidebar state from localStorage
      */
-    const uploadMultipleFiles = function(files) {
-        // Maintain directory structure by extracting relative paths
-        const filePaths = new Map();
+    const restoreSidebarState = function() {
+        const collapsed = localStorage.getItem('sidebar-collapsed');
 
-        // First, process all files to extract their paths
-        files.forEach(file => {
-            // Get the directory path (if any) from the webkitRelativePath
-            let relativePath = '';
-            if (file.webkitRelativePath) {
-                // Extract the directory structure without the filename
-                const pathParts = file.webkitRelativePath.split('/');
-                pathParts.pop(); // Remove the filename
-                relativePath = pathParts.join('/');
+        if (collapsed === 'true' && projectFilesContainer) {
+            collapseSidebar();
+        } else if (collapsed === 'false' && projectFilesContainer) {
+            expandSidebar();
+        }
+    };
+
+    /**
+     * Handle project loading
+     */
+    const handleProjectLoad = async function() {
+        try {
+            const projectData = await ElectronService.loadProject();
+            if (!projectData) return;
+
+            const { projectPath, files } = projectData;
+            currentProjectPath = projectPath;
+
+            // Show loading toast
+            DomUtils.showToast(`Loading project with ${files.length} files...`, 'info');
+
+            // Get session ID from socket service
+            const sessionId = SocketService.getSessionId();
+            if (!sessionId) {
+                DomUtils.showError('No active session');
+                return;
             }
 
-            filePaths.set(file, relativePath);
-        });
+            // Send to backend
+            const result = await ElectronService.sendProjectToBackend(sessionId, files);
 
-        // Now upload the files
-        FileService.uploadMultipleFiles(files, filePaths)
-            .catch(error => {
-                console.error('Multi-upload error:', error);
-                // Error handling is done in the observer
+            // Process the files for UI
+            projectFiles = files.map(file => ({
+                filename: file.filename,
+                path: file.path,
+                lastModified: file.lastModified,
+                size: file.size
+            }));
+
+            // Set primary file to the first one if none is set
+            if (!primaryFile && projectFiles.length > 0) {
+                primaryFile = projectFiles[0].filename;
+            }
+
+            // Update project files list in the UI
+            updateProjectFilesList();
+
+            // Subscribe to file changes
+            const unsubscribe = ElectronService.subscribeToFileChanges((changedFile) => {
+                console.log('File changed:', changedFile);
+
+                // Update the UI and notify the user as needed
+                if (changedFile.eventType === 'add' || changedFile.eventType === 'change') {
+                    // Update file in the list or add it
+                    const existingIndex = projectFiles.findIndex(f => f.filename === changedFile.filename);
+                    if (existingIndex !== -1) {
+                        projectFiles[existingIndex] = {
+                            filename: changedFile.filename,
+                            path: changedFile.path
+                        };
+                        DomUtils.showToast(`File updated: ${changedFile.filename}`, 'info', 2000);
+                    } else {
+                        projectFiles.push({
+                            filename: changedFile.filename,
+                            path: changedFile.path
+                        });
+                        DomUtils.showToast(`New file added: ${changedFile.filename}`, 'info', 2000);
+                    }
+                } else if (changedFile.eventType === 'delete') {
+                    // Remove file from list
+                    projectFiles = projectFiles.filter(f => f.filename !== changedFile.filename);
+                    DomUtils.showToast(`File removed: ${changedFile.filename}`, 'info', 2000);
+
+                    // If this was the primary file, reset
+                    if (primaryFile === changedFile.filename) {
+                        primaryFile = projectFiles.length > 0 ? projectFiles[0].filename : null;
+                    }
+                }
+
+                // Update UI
+                updateProjectFilesList();
             });
+
+            // Store unsubscribe function for cleanup
+            window._fileChangeUnsubscribe = unsubscribe;
+
+            // Show success message
+            DomUtils.showToast(`Project loaded with ${files.length} files`, 'success');
+
+            // Show the project files panel
+            DomUtils.showElement(projectFilesContainer);
+            expandSidebar();
+
+            // Inform through chat that project was loaded
+            ChatComponent.addMessage('user', `I've loaded a project with ${files.length} files. The project is located at ${projectPath}.`);
+        } catch (error) {
+            console.error('Project loading error:', error);
+            DomUtils.showError(`Failed to load project: ${error.message}`);
+        }
     };
 
     /**
-     * Clear current file
+     * Reload a project from a path
      */
-    const clearFile = function() {
-        FileService.clearFile();
+    const reloadProject = async function(projectPath) {
+        try {
+            const files = await window.electronAPI.getProjectStructure(projectPath);
+
+            // Process the rest as in handleProjectLoad
+            // (Similar logic as above, avoiding duplication)
+            const sessionId = SocketService.getSessionId();
+            if (sessionId) {
+                await ElectronService.sendProjectToBackend(sessionId, files);
+                DomUtils.showToast(`Project reloaded with ${files.length} files`, 'success');
+            }
+        } catch (error) {
+            console.error('Project reload error:', error);
+        }
     };
 
     /**
@@ -164,7 +279,7 @@ const FileUploadComponent = (function() {
     };
 
     /**
-     * Remove a file from the project
+     * Remove a file from the project (UI only, doesn't delete file)
      * @param {string} filename - Filename to remove
      */
     const removeProjectFile = function(filename) {
@@ -209,62 +324,115 @@ const FileUploadComponent = (function() {
         if (projectFiles.length > 0) {
             DomUtils.showElement(projectFilesContainer);
 
-            // Add the files
+            // Group files by directory
+            const filesByDirectory = {};
             projectFiles.forEach(file => {
-                const fileItem = DomUtils.createElement('div', {
-                    'data-filename': file.filename
-                }, 'project-file-item flex items-center justify-between p-2 border-b');
+                const filename = file.filename;
+                const lastSlashIndex = filename.lastIndexOf('/');
 
-                // Set as active if this is the primary file
-                if (file.filename === primaryFile) {
-                    fileItem.classList.add('active');
+                // If file has a directory path
+                if (lastSlashIndex !== -1) {
+                    const directory = filename.substring(0, lastSlashIndex);
+                    const basename = filename.substring(lastSlashIndex + 1);
+
+                    filesByDirectory[directory] = filesByDirectory[directory] || [];
+                    filesByDirectory[directory].push({
+                        ...file,
+                        basename
+                    });
+                } else {
+                    // Root directory files
+                    filesByDirectory[''] = filesByDirectory[''] || [];
+                    filesByDirectory[''].push({
+                        ...file,
+                        basename: filename
+                    });
+                }
+            });
+
+            // Create directory headers and file items
+            Object.keys(filesByDirectory).sort().forEach(directory => {
+                const files = filesByDirectory[directory];
+
+                // If not root directory, add directory header
+                if (directory !== '') {
+                    const dirHeader = DomUtils.createElement('div', {}, 'bg-gray-100 p-2 text-sm font-semibold text-gray-700 border-b');
+                    dirHeader.textContent = directory;
+                    DomUtils.appendChild(projectFilesList, dirHeader);
                 }
 
-                // File name and icon
-                const fileNameContainer = DomUtils.createElement('div', {}, 'flex items-center');
-
-                const fileIcon = DomUtils.createElement('div', {}, 'file-icon mr-2');
-                fileIcon.innerHTML = getFileIcon(file.filename);
-
-                const fileNameSpan = DomUtils.createElement('span', {}, 'file-name text-sm');
-                fileNameSpan.textContent = file.filename;
-
-                DomUtils.appendChild(fileNameContainer, fileIcon);
-                DomUtils.appendChild(fileNameContainer, fileNameSpan);
-
-                // Actions (focus, remove)
-                const actionsContainer = DomUtils.createElement('div', {}, 'flex items-center');
-
-                const focusBtn = DomUtils.createElement('button', {
-                    title: 'Focus on this file'
-                }, 'focus-file-btn p-1 text-blue-600 hover:text-blue-800 mr-2');
-                focusBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>`;
-                DomUtils.addEvent(focusBtn, 'click', () => setPrimaryFile(file.filename));
-
-                const removeBtn = DomUtils.createElement('button', {
-                    title: 'Remove this file'
-                }, 'remove-file-btn p-1 text-red-600 hover:text-red-800');
-                removeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>`;
-                DomUtils.addEvent(removeBtn, 'click', () => removeProjectFile(file.filename));
-
-                DomUtils.appendChild(actionsContainer, focusBtn);
-                DomUtils.appendChild(actionsContainer, removeBtn);
-
-                // Add name and actions to the item
-                DomUtils.appendChild(fileItem, fileNameContainer);
-                DomUtils.appendChild(fileItem, actionsContainer);
-
-                // Add the item to the list
-                DomUtils.appendChild(projectFilesList, fileItem);
+                // Add files
+                files.sort((a, b) => a.basename.localeCompare(b.basename)).forEach(file => {
+                    const fileItem = createFileItem(file);
+                    DomUtils.appendChild(projectFilesList, fileItem);
+                });
             });
         } else {
-            DomUtils.hideElement(projectFilesContainer);
+            // No files - show a message
+            const emptyMessage = DomUtils.createElement('div', {}, 'p-4 text-sm text-gray-500 text-center');
+            emptyMessage.textContent = 'No project files loaded';
+            DomUtils.appendChild(projectFilesList, emptyMessage);
         }
+    };
+
+    /**
+     * Create a file item element
+     * @param {Object} file - File data
+     * @returns {HTMLElement} File item element
+     */
+    const createFileItem = function(file) {
+        const fileItem = DomUtils.createElement('div', {
+            'data-filename': file.filename,
+            'title': file.filename
+        }, 'project-file-item flex items-center justify-between p-2 border-b hover:bg-gray-50');
+
+        // Set as active if this is the primary file
+        if (file.filename === primaryFile) {
+            fileItem.classList.add('active');
+        }
+
+        // File name and icon
+        const fileNameContainer = DomUtils.createElement('div', {}, 'flex items-center flex-1 min-w-0');
+
+        const fileIcon = DomUtils.createElement('div', {}, 'file-icon mr-2 flex-shrink-0');
+        fileIcon.innerHTML = getFileIcon(file.basename || file.filename);
+
+        const fileNameSpan = DomUtils.createElement('span', {}, 'file-name text-sm truncate');
+        fileNameSpan.textContent = file.basename || file.filename;
+
+        DomUtils.appendChild(fileNameContainer, fileIcon);
+        DomUtils.appendChild(fileNameContainer, fileNameSpan);
+
+        // Actions (focus, remove)
+        const actionsContainer = DomUtils.createElement('div', {}, 'flex items-center ml-2');
+
+        const focusBtn = DomUtils.createElement('button', {
+            title: 'Focus on this file',
+            type: 'button'
+        }, 'focus-file-btn p-1 text-blue-600 hover:text-blue-800 mr-2');
+        focusBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+        </svg>`;
+        DomUtils.addEvent(focusBtn, 'click', () => setPrimaryFile(file.filename));
+
+        const removeBtn = DomUtils.createElement('button', {
+            title: 'Remove this file from view',
+            type: 'button'
+        }, 'remove-file-btn p-1 text-red-600 hover:text-red-800');
+        removeBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>`;
+        DomUtils.addEvent(removeBtn, 'click', () => removeProjectFile(file.filename));
+
+        DomUtils.appendChild(actionsContainer, focusBtn);
+        DomUtils.appendChild(actionsContainer, removeBtn);
+
+        // Add name and actions to the item
+        DomUtils.appendChild(fileItem, fileNameContainer);
+        DomUtils.appendChild(fileItem, actionsContainer);
+
+        return fileItem;
     };
 
     /**
@@ -318,164 +486,11 @@ const FileUploadComponent = (function() {
         </svg>`;
     };
 
-    /**
-     * Handle upload start event
-     * @param {Object} data - Event data
-     */
-    const handleUploadStart = function(data) {
-        // Show uploading toast
-        DomUtils.showToast('Uploading file...');
-    };
-
-    /**
-     * Handle upload success event
-     * @param {Object} data - Event data
-     */
-    const handleUploadSuccess = function(data) {
-        // Update UI with file info
-        DomUtils.setText(fileName, data.fileName);
-        DomUtils.showElement(fileInfo);
-
-        // Show success message
-        DomUtils.showToast(`File uploaded: ${data.fileName}`);
-
-        // Update current file
-        currentFilePath = data.filePath;
-        currentFileName = data.fileName;
-
-        // Add to project files if not already there
-        const originalName = data.originalName || data.fileName;
-        const existingIndex = projectFiles.findIndex(f => f.filename === originalName);
-        if (existingIndex !== -1) {
-            projectFiles[existingIndex] = {
-                filename: originalName,
-                path: data.filePath
-            };
-        } else {
-            projectFiles.push({
-                filename: originalName,
-                path: data.filePath
-            });
-        }
-
-        // Set as primary file
-        primaryFile = originalName;
-
-        // Update project files list
-        updateProjectFilesList();
-
-        // Publish file upload success event
-        EventUtils.publish('fileUploaded', data);
-    };
-
-    /**
-     * Handle multiple file upload success
-     * @param {Object} data - Event data with files array
-     */
-    const handleMultiUploadSuccess = function(data) {
-        // Extract file counts from the response
-        const processedCount = data.processed || data.count || (data.files ? data.files.length : 0);
-        const skippedCount = data.skipped || 0;
-
-        // Build an appropriate message
-        let message = `Uploaded ${processedCount} code files`;
-        if (skippedCount > 0) {
-            message += ` (skipped ${skippedCount} non-code files)`;
-        }
-
-        // Show success message with appropriate type
-        if (processedCount > 0) {
-            DomUtils.showToast(message, 'success');
-        } else if (skippedCount > 0) {
-            DomUtils.showToast(`No code files uploaded. Skipped ${skippedCount} non-code files.`, 'warning');
-        }
-
-        // Only process files if there are any
-        if (data.files && data.files.length > 0) {
-            // Add files to project
-            data.files.forEach(file => {
-                const originalName = file.originalName || file.filename;
-                const existingIndex = projectFiles.findIndex(f => f.filename === originalName);
-                if (existingIndex !== -1) {
-                    projectFiles[existingIndex] = {
-                        filename: originalName,
-                        path: file.filePath
-                    };
-                } else {
-                    projectFiles.push({
-                        filename: originalName,
-                        path: file.filePath
-                    });
-                }
-            });
-
-            // Set primary file to the first one if none is set
-            if (!primaryFile && projectFiles.length > 0) {
-                primaryFile = projectFiles[0].filename;
-            }
-
-            // Update project files list in the UI
-            updateProjectFilesList();
-        }
-
-        // Publish event for other components
-        EventUtils.publish('projectFilesUploaded', data);
-    };
-
-    /**
-     * Handle upload error event
-     * @param {Object} data - Event data
-     */
-    const handleUploadError = function(data) {
-        DomUtils.showError(data.error);
-    };
-
-    /**
-     * Handle file clear event
-     */
-    const handleFileClear = function() {
-        // Reset UI
-        DomUtils.hideElement(fileInfo);
-        DomUtils.setText(fileName, '');
-        fileUploadInput.value = '';
-
-        // Reset current file
-        currentFilePath = null;
-        currentFileName = null;
-
-        // Publish file cleared event
-        EventUtils.publish('fileCleared', {});
-    };
-
     return {
         /**
          * Initialize the component
          */
         init: init,
-
-        /**
-         * Check if a file is selected
-         * @returns {boolean} True if a file is selected
-         */
-        hasFile: function() {
-            return currentFilePath !== null;
-        },
-
-        /**
-         * Get current file path
-         * @returns {string|null} Current file path
-         */
-        getFilePath: function() {
-            return currentFilePath;
-        },
-
-        /**
-         * Get current file name
-         * @returns {string|null} Current file name
-         */
-        getFileName: function() {
-            return currentFileName;
-        },
 
         /**
          * Get primary file name
@@ -491,6 +506,12 @@ const FileUploadComponent = (function() {
          */
         getProjectFiles: function() {
             return projectFiles;
-        }
+        },
+
+        /**
+         * Set primary file
+         * @param {string} filename - Filename to set as primary
+         */
+        setPrimaryFile: setPrimaryFile
     };
 })();
