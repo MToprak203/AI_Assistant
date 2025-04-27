@@ -17,6 +17,13 @@ const App = (function() {
      */
     const init = async function() {
         try {
+            // Check for session ID in localStorage (from loading page)
+            const storedSessionId = localStorage.getItem('sessionId');
+            if (storedSessionId) {
+                console.log('Retrieved session ID from localStorage:', storedSessionId);
+                sessionId = storedSessionId;
+            }
+
             // Initialize components
             FileUploadComponent.init();
             ChatComponent.init();
@@ -27,8 +34,16 @@ const App = (function() {
             // Connect to socket
             SocketService.connect();
 
-            // Create session
-            await createSession();
+            // If we have a stored session ID, use it
+            if (sessionId) {
+                console.log('Using stored session ID:', sessionId);
+                SocketService.setSessionId(sessionId);
+                // Publish session initialized event
+                EventUtils.publish('sessionInitialized', { sessionId });
+            } else {
+                // Create new session if we don't have one
+                await createSession();
+            }
 
             // Publish initialization event
             EventUtils.publish('appInitialized', {});
@@ -93,7 +108,7 @@ const App = (function() {
         }
 
         // If there are project files, show the sidebar
-        if (FileUploadComponent.getProjectFiles().length > 0) {
+        if (FileUploadComponent.getProjectFiles && FileUploadComponent.getProjectFiles().length > 0) {
             DomUtils.showElement(projectFilesContainer);
             // If it should be collapsed, collapse it
             if (collapsed === 'true') {
@@ -110,6 +125,10 @@ const App = (function() {
             // Create session via API
             const data = await ApiService.createSession();
             sessionId = data.session_id;
+            console.log('Created new session:', sessionId);
+
+            // Save session ID to localStorage for persistence
+            localStorage.setItem('sessionId', sessionId);
 
             // Set session ID in socket service
             SocketService.setSessionId(sessionId);
@@ -141,13 +160,14 @@ const App = (function() {
                     collapseSidebar();
                 }
 
-                // TODO: Process the files
                 console.log('Project files loaded:', data.files);
+                return data.files;
             }
         } catch (error) {
             console.error('Failed to load project files:', error);
             // Don't throw, just log it - this is non-critical
         }
+        return [];
     };
 
     return {
@@ -163,6 +183,21 @@ const App = (function() {
         getSessionId: function() {
             return sessionId;
         },
+
+        /**
+         * Create a new session if needed
+         */
+        ensureSession: async function() {
+            if (!sessionId) {
+                return await createSession();
+            }
+            return sessionId;
+        },
+
+        /**
+         * Load project files
+         */
+        loadProjectFiles: loadProjectFiles,
 
         /**
          * Collapse or expand the project files panel

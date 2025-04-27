@@ -2,6 +2,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const url = require('url');
+const fs = require('fs');
 const Store = require('electron-store');
 const fileManager = require('./file-services/file-manager');
 const apiService = require('./file-services/api-service');
@@ -198,6 +199,8 @@ ipcMain.handle('send-project-to-backend', async (event, sessionId, files) => {
   try {
     // Add content to files
     const filesWithContent = await Promise.all(files.map(async file => {
+      if (!file.path) return file;
+
       try {
         const content = fileManager.getFileContent(file.path);
         return {
@@ -213,7 +216,17 @@ ipcMain.handle('send-project-to-backend', async (event, sessionId, files) => {
       }
     }));
 
-    return await apiService.sendProjectToBackend(filesWithContent, sessionId);
+    // Get current session ID if none provided
+    const targetSessionId = sessionId || apiService.getSessionId();
+
+    // If we still don't have a session ID, create one
+    if (!targetSessionId) {
+      console.log('No session ID available, creating a new session');
+      await apiService.createSession();
+    }
+
+    // Send to API service
+    return await apiService.sendProjectToBackend(filesWithContent, targetSessionId);
   } catch (error) {
     console.error('Error sending project to backend:', error);
     throw error;

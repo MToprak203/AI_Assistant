@@ -133,6 +133,15 @@ const ChatComponent = (function() {
     };
 
     /**
+     * Add a message to the chat
+     * @param {string} role - Message role ('user' or 'assistant')
+     * @param {string} content - Message content
+     */
+    const addMessage = function(role, content) {
+        return MessageComponent.addMessage(role, content);
+    };
+
+    /**
      * Send a message
      */
     const sendMessage = function() {
@@ -153,11 +162,19 @@ const ChatComponent = (function() {
         // Clear input
         messageInput.value = '';
 
-        // Get file path if a file is uploaded
-        const filePath = FileUploadComponent.getFilePath();
+        // Get file path if a file is uploaded - FileUploadComponent might not have getFilePath
+        let filePath = null;
+        if (typeof FileUploadComponent.getCurrentFilePath === 'function') {
+            filePath = FileUploadComponent.getCurrentFilePath();
+        } else if (typeof FileService.getCurrentFilePath === 'function') {
+            filePath = FileService.getCurrentFilePath();
+        }
 
         // Get primary file if available
-        const primaryFile = FileUploadComponent.getPrimaryFile();
+        let primaryFile = null;
+        if (typeof FileUploadComponent.getPrimaryFile === 'function') {
+            primaryFile = FileUploadComponent.getPrimaryFile();
+        }
 
         // Send message via socket
         SocketService.sendMessage(message, filePath, primaryFile);
@@ -197,6 +214,13 @@ const ChatComponent = (function() {
          */
         clearInput: function() {
             messageInput.value = '';
-        }
+        },
+
+        /**
+         * Add a message to the chat
+         * @param {string} role - Message role ('user' or 'assistant')
+         * @param {string} content - Message content
+         */
+        addMessage: addMessage
     };
 })();

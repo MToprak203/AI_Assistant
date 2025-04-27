@@ -17,6 +17,7 @@ const LoadingPage = (function() {
 
     // Socket instance
     let socket = null;
+    let sessionId = null;
 
     // Timeout values
     const CONNECTION_TIMEOUT = 10000; // 10 seconds
@@ -35,6 +36,13 @@ const LoadingPage = (function() {
      */
     const init = function() {
         console.log("Starting loading sequence");
+
+        // Check for session ID in URL query parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('session_id')) {
+            sessionId = urlParams.get('session_id');
+            console.log("Found session ID in URL:", sessionId);
+        }
 
         // Set up retry button
         retryButton.addEventListener('click', retry);
@@ -74,7 +82,13 @@ const LoadingPage = (function() {
             clearTimeout(connectionTimeoutId);
             console.log('Connected to server successfully');
             updateStatus('connection', 'success');
-            createSession();
+
+            // If we have a session ID from URL, use it
+            if (sessionId) {
+                joinSession(sessionId);
+            } else {
+                createSession();
+            }
         });
 
         socket.on('connect_error', (error) => {
@@ -97,6 +111,7 @@ const LoadingPage = (function() {
         // Listen for session joined event
         socket.on('session_joined', (data) => {
             clearTimeout(sessionTimeoutId);
+            console.log('Session joined response:', data);
 
             if (data.status === 'success') {
                 console.log('Session joined successfully');
@@ -112,15 +127,24 @@ const LoadingPage = (function() {
         // Listen for model initialization event
         socket.on('model_initialized', (data) => {
             clearTimeout(modelTimeoutId);
+            console.log('Received model_initialized event:', data);
 
             if (data.status === 'success') {
                 console.log('AI model initialized successfully');
                 updateStatus('model', 'success');
+
+                // Store session ID in localStorage for the main page
+                if (sessionId) {
+                    localStorage.setItem('sessionId', sessionId);
+                    console.log('Saved session ID to localStorage:', sessionId);
+                }
+
                 // Add fade-out animation before redirecting
                 const mainContainer = document.querySelector('main');
                 if (mainContainer) {
                     mainContainer.classList.add('fade-out');
                     setTimeout(() => {
+                        // Redirect to main chat page
                         window.location.href = '/';
                     }, 800); // Matches the CSS transition duration
                 } else {
@@ -136,15 +160,25 @@ const LoadingPage = (function() {
 
         // Listen for model status event
         socket.on('model_status', (data) => {
+            console.log('Received model_status event:', data);
+
             if (data.status === 'loading') {
                 updateStatus('model', 'loading', data.message || 'Loading AI model...');
             } else if (data.status === 'success') {
                 updateStatus('model', 'success');
+
+                // Store session ID in localStorage for the main page
+                if (sessionId) {
+                    localStorage.setItem('sessionId', sessionId);
+                    console.log('Saved session ID to localStorage:', sessionId);
+                }
+
                 // Add fade-out animation before redirecting
                 const mainContainer = document.querySelector('main');
                 if (mainContainer) {
                     mainContainer.classList.add('fade-out');
                     setTimeout(() => {
+                        // Redirect to main chat page
                         window.location.href = '/';
                     }, 800); // Matches the CSS transition duration
                 } else {
@@ -164,6 +198,23 @@ const LoadingPage = (function() {
         socket.on('maxReconnectAttemptsReached', () => {
             handleError('Lost connection to server. Please refresh the page.');
         });
+    };
+
+    /**
+     * Join an existing session
+     */
+    const joinSession = function(sid) {
+        console.log("Joining existing session:", sid);
+        updateStatus('session', 'loading');
+
+        // Set session timeout
+        sessionTimeoutId = setTimeout(() => {
+            updateStatus('session', 'error');
+            handleError('Session joining timed out. Please try again.');
+        }, SESSION_TIMEOUT);
+
+        // Join session via socket
+        socket.emit('join_session', { session_id: sid });
     };
 
     /**
@@ -191,6 +242,9 @@ const LoadingPage = (function() {
         .then(data => {
             console.log('Session created:', data);
             if (data.session_id) {
+                // Store the session ID
+                sessionId = data.session_id;
+
                 // Join the session room
                 socket.emit('join_session', { session_id: data.session_id });
             } else {
@@ -291,7 +345,7 @@ const LoadingPage = (function() {
         }
 
         // Update classes
-        icon.className = `flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-full ${bgColor} ${svgColor}`;
+        icon.className = `flex-shrink-0 h-8 w-8 flex items-center justify-content center rounded-full ${bgColor} ${svgColor}`;
         statusElement.className = `text-sm ${textColor}`;
     };
 

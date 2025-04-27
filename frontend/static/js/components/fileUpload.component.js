@@ -37,6 +37,18 @@ const FileUploadComponent = (function() {
                 reloadProject(currentProjectPath);
             }
         });
+
+        // Listen for load project events (from menu)
+        EventUtils.subscribe('loadProject', (data) => {
+            handleExternalProjectLoad(data.projectPath, data.files);
+        });
+
+        // Listen for reload project events
+        EventUtils.subscribe('reloadProject', () => {
+            if (currentProjectPath) {
+                reloadProject(currentProjectPath);
+            }
+        });
     };
 
     /**
@@ -144,86 +156,7 @@ const FileUploadComponent = (function() {
             const projectData = await ElectronService.loadProject();
             if (!projectData) return;
 
-            const { projectPath, files } = projectData;
-            currentProjectPath = projectPath;
-
-            // Show loading toast
-            DomUtils.showToast(`Loading project with ${files.length} files...`, 'info');
-
-            // Get session ID from socket service
-            const sessionId = SocketService.getSessionId();
-            if (!sessionId) {
-                DomUtils.showError('No active session');
-                return;
-            }
-
-            // Send to backend
-            const result = await ElectronService.sendProjectToBackend(sessionId, files);
-
-            // Process the files for UI
-            projectFiles = files.map(file => ({
-                filename: file.filename,
-                path: file.path,
-                lastModified: file.lastModified,
-                size: file.size
-            }));
-
-            // Set primary file to the first one if none is set
-            if (!primaryFile && projectFiles.length > 0) {
-                primaryFile = projectFiles[0].filename;
-            }
-
-            // Update project files list in the UI
-            updateProjectFilesList();
-
-            // Subscribe to file changes
-            const unsubscribe = ElectronService.subscribeToFileChanges((changedFile) => {
-                console.log('File changed:', changedFile);
-
-                // Update the UI and notify the user as needed
-                if (changedFile.eventType === 'add' || changedFile.eventType === 'change') {
-                    // Update file in the list or add it
-                    const existingIndex = projectFiles.findIndex(f => f.filename === changedFile.filename);
-                    if (existingIndex !== -1) {
-                        projectFiles[existingIndex] = {
-                            filename: changedFile.filename,
-                            path: changedFile.path
-                        };
-                        DomUtils.showToast(`File updated: ${changedFile.filename}`, 'info', 2000);
-                    } else {
-                        projectFiles.push({
-                            filename: changedFile.filename,
-                            path: changedFile.path
-                        });
-                        DomUtils.showToast(`New file added: ${changedFile.filename}`, 'info', 2000);
-                    }
-                } else if (changedFile.eventType === 'delete') {
-                    // Remove file from list
-                    projectFiles = projectFiles.filter(f => f.filename !== changedFile.filename);
-                    DomUtils.showToast(`File removed: ${changedFile.filename}`, 'info', 2000);
-
-                    // If this was the primary file, reset
-                    if (primaryFile === changedFile.filename) {
-                        primaryFile = projectFiles.length > 0 ? projectFiles[0].filename : null;
-                    }
-                }
-
-                // Update UI
-                updateProjectFilesList();
-            });
-
-            // Store unsubscribe function for cleanup
-            window._fileChangeUnsubscribe = unsubscribe;
-
-            // Show success message
-            DomUtils.showToast(`Project loaded with ${files.length} files`, 'success');
-
-            // Show the project files panel
-            DomUtils.showElement(projectFilesContainer);
-            expandSidebar();
-
-            // Inform through chat that project was loaded
-            ChatComponent.addMessage('user', `I've loaded a project with ${files.length} files. The project is located at ${projectPath}.`);
+            handleExternalProjectLoad(projectData.projectPath, projectData.files);
         } catch (error) {
             console.error('Project loading error:', error);
             DomUtils.showError(`Failed to load project: ${error.message}`);
@@ -231,21 +164,114 @@ const FileUploadComponent = (function() {
     };
 
     /**
+     * Handle project loading from external source (e.g. menu)
+     */
+    const handleExternalProjectLoad = async function(projectPath, files) {
+  try {
+    currentProjectPath = projectPath;
+
+    // Show loading toast
+    DomUtils.showToast(`Loading project with ${files.length} files...`, 'info');
+
+    // Get session ID from socket service
+    let sessionId = SocketService.getSessionId();
+
+    // Check if we have a valid session ID
+    if (!sessionId) {
+      try {
+        // Try to create a session
+        if (ElectronService.isElectron() && typeof window.electronAPI.createSession === 'function') {
+          sessionId = await window.electronAPI.createSession();
+          console.log('Created new session:', sessionId);
+        } else {
+          DomUtils.showError('No active session');
+          return;
+        }
+      } catch (error) {
+        console.error('Failed to create session:', error);
+        DomUtils.showError('Failed to create session');
+        return;
+      }
+    }
+
+    // Wait a moment to ensure session is registered on backend
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Send to backend - use the correct method based on environment
+    if (ElectronService.isElectron()) {
+      try {
+        console.log('Uploading project using session:', sessionId);
+        const result = await window.electronAPI.sendProjectToBackend(sessionId, files);
+        console.log('Project upload result:', result);
+      } catch (error) {
+        console.error('Error sending project to backend:', error);
+        DomUtils.showError(`Failed to upload project: ${error.message}`);
+        return;
+      }
+    } else {
+      // If running in web mode, handle differently
+      console.warn('Project loading is not fully supported in web mode');
+      // Potentially use normal file upload workflow here
+    }
+
+    // Process the files for UI
+    projectFiles = files.map(file => ({
+      filename: file.filename || (file.path ? path.basename(file.path) : 'unknown'),
+      path: file.path,
+      lastModified: file.lastModified,
+      size: file.size
+    }));
+
+    // Set primary file to the first one if none is set
+    if (!primaryFile && projectFiles.length > 0) {
+      primaryFile = projectFiles[0].filename;
+    }
+
+    // Update project files list in the UI
+    updateProjectFilesList();
+
+    // Show success message
+    DomUtils.showToast(`Project loaded with ${files.length} files`, 'success');
+
+    // Show the project files panel
+    DomUtils.showElement(projectFilesContainer);
+    expandSidebar();
+
+    // Inform through chat - if ChatComponent has the method
+    if (ChatComponent && typeof ChatComponent.addMessage === 'function') {
+      ChatComponent.addMessage('user', `I've loaded a project with ${files.length} files. The project is located at ${projectPath}.`);
+    }
+  } catch (error) {
+    console.error('Project loading error:', error);
+    DomUtils.showError(`Failed to load project: ${error.message}`);
+  }
+};
+
+    /**
      * Reload a project from a path
      */
     const reloadProject = async function(projectPath) {
         try {
+            if (!ElectronService.isElectron() || !window.electronAPI) {
+                console.error('Cannot reload project: Electron API not available');
+                return;
+            }
+
             const files = await window.electronAPI.getProjectStructure(projectPath);
 
             // Process the rest as in handleProjectLoad
-            // (Similar logic as above, avoiding duplication)
             const sessionId = SocketService.getSessionId();
             if (sessionId) {
-                await ElectronService.sendProjectToBackend(sessionId, files);
+                await window.electronAPI.sendProjectToBackend(sessionId, files);
                 DomUtils.showToast(`Project reloaded with ${files.length} files`, 'success');
+
+                // Update UI
+                projectFiles = files;
+                updateProjectFilesList();
             }
         } catch (error) {
             console.error('Project reload error:', error);
+            DomUtils.showError(`Failed to reload project: ${error.message}`);
         }
     };
 
@@ -512,6 +538,22 @@ const FileUploadComponent = (function() {
          * Set primary file
          * @param {string} filename - Filename to set as primary
          */
-        setPrimaryFile: setPrimaryFile
+        setPrimaryFile: setPrimaryFile,
+
+        /**
+         * Get the file path
+         * @returns {string|null} File path
+         */
+        getFilePath: function() {
+            return null; // This component doesn't handle single file uploads
+        },
+
+        /**
+         * Get current project path
+         * @returns {string|null} Current project path
+         */
+        getCurrentProjectPath: function() {
+            return currentProjectPath;
+        }
     };
 })();

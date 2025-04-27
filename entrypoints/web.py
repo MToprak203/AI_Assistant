@@ -71,15 +71,35 @@ class WebApp:
         @self.app.route('/')
         def index():
             """Render the main chat interface."""
+            # Get session ID from request (header or Flask session)
+            session_id = get_session_id_from_request()
+
             # Check if model is initialized
-            if not self.model_manager.is_initialized():
-                # Redirect to loading page if not initialized
-                return render_template('loading.html')
+            if not self.model_manager.is_initialized() and not self.model_manager.is_initializing():
+                # If model is not initialized or initializing, redirect to loading page
+                from flask import redirect
+                redirect_url = '/loading'
+                if session_id:
+                    redirect_url += f'?session_id={session_id}'
+                return redirect(redirect_url)
+
+            # Store session ID in cookie if it's available
+            if session_id:
+                flask_session['chat_session_id'] = session_id
+
             return render_template('index.html')
 
         @self.app.route('/loading')
         def loading():
             """Render the loading page."""
+            # Get session ID from request or query parameter
+            session_id = get_session_id_from_request()
+
+            # Check for session ID in query parameters
+            if not session_id and request.args.get('session_id'):
+                session_id = request.args.get('session_id')
+                flask_session['chat_session_id'] = session_id
+
             return render_template('loading.html')
 
         @self.app.route('/<path:filename>')
@@ -166,17 +186,23 @@ class WebApp:
         @self.app.route('/api/upload/multiple', methods=['POST'])
         def upload_multiple_files():
             """Handle multiple file uploads as a project, preserving directory structure."""
-            if 'files[]' not in request.files:
-                return jsonify({'error': 'No files in request'}), 400
-
-            files = request.files.getlist('files[]')
-            if not files or len(files) == 0:
-                return jsonify({'error': 'No files selected'}), 400
-
             try:
-                # Get current session ID from the Flask session
-                session_id = flask_session.get('chat_session_id')
+                # Get session ID from request
+                session_id = get_session_id_from_request()
                 print(f"Processing multiple file upload for session: {session_id}")
+
+                # Check request content type
+                is_json = request.is_json or request.headers.get('Content-Type', '').startswith('application/json')
+
+                # Handle JSON data (from Electron app)
+                if is_json:
+                    data = request.get_json()
+
+                    # Try to get session ID from request body if not found in header/cookie
+                    if not session_id and data and 'session_id' in data:
+                        session_id = data.get('session_id')
+                        if session_id:
+                            flask_session['chat_session_id'] = session_id
 
                 # Ensure we have a valid session
                 if not session_id:
@@ -188,45 +214,95 @@ class WebApp:
 
                 conversation_uc = session_data['conversation_uc']
 
-                # Check for directory structure info
-                paths = request.form.getlist('paths[]')
-                if paths:
-                    print(f"Received {len(paths)} directory paths for {len(files)} files")
+                # Handle JSON data for file upload
+                if is_json:
+                    data = request.get_json()
 
-                # Save all code files and add to project
-                upload_result = self.file_adapter.save_multiple_files(files, session_id)
-                saved_files = upload_result.get('saved_files', [])
-                skipped_files = upload_result.get('skipped_files', [])
+                    files_data = data.get('files', [])
+                    if not files_data:
+                        return jsonify({
+                            'error': 'No files found in request',
+                            'skipped': 0,
+                            'skipped_files': []
+                        }), 400
 
-                if not saved_files:
+                    # Add all files to the conversation
+                    processed_files = []
+                    for file_info in files_data:
+                        try:
+                            filename = file_info.get('filename')
+                            content = file_info.get('content')
+
+                            if not filename or not content:
+                                continue
+
+                            # Add to project files
+                            conversation_uc.add_project_file(filename, content)
+                            processed_files.append({
+                                'filename': filename,
+                                'size': len(content)
+                            })
+                        except Exception as e:
+                            print(f"Error adding file to project: {str(e)}")
+                            # Continue with other files
+
                     return jsonify({
-                        'error': 'No code files found to process',
+                        'files': processed_files,
+                        'count': len(processed_files),
+                        'processed': len(processed_files),
+                        'skipped': 0,
+                        'session_id': session_id,
+                        'message': f"Uploaded {len(processed_files)} files"
+                    })
+                else:
+                    # Original form-data handling
+                    if 'files[]' not in request.files:
+                        return jsonify({'error': 'No files in request'}), 400
+
+                    files = request.files.getlist('files[]')
+                    if not files or len(files) == 0:
+                        return jsonify({'error': 'No files selected'}), 400
+
+                    # Check for directory structure info
+                    paths = request.form.getlist('paths[]')
+                    if paths:
+                        print(f"Received {len(paths)} directory paths for {len(files)} files")
+
+                    # Save all code files and add to project
+                    upload_result = self.file_adapter.save_multiple_files(files, session_id)
+                    saved_files = upload_result.get('saved_files', [])
+                    skipped_files = upload_result.get('skipped_files', [])
+
+                    if not saved_files:
+                        return jsonify({
+                            'error': 'No code files found to process',
+                            'skipped': len(skipped_files),
+                            'skipped_files': skipped_files
+                        }), 400
+
+                    # Add all saved files to the conversation
+                    for file_info in saved_files:
+                        try:
+                            # Read content
+                            file_content = self.file_adapter.read_file(file_info['file_path'])
+
+                            # Add to project files
+                            # Use the original_name which includes the directory path
+                            conversation_uc.add_project_file(file_info['original_name'], file_content)
+                        except Exception as e:
+                            print(f"Error adding file to project: {str(e)}")
+                            # Continue with other files
+
+                    # Return information about uploaded files
+                    return jsonify({
+                        'files': saved_files,
+                        'count': len(saved_files),
+                        'processed': len(saved_files),
                         'skipped': len(skipped_files),
-                        'skipped_files': skipped_files
-                    }), 400
+                        'session_id': session_id,
+                        'message': f"Uploaded {len(saved_files)} code files (skipped {len(skipped_files)} non-code files)"
+                    })
 
-                # Add all saved files to the conversation
-                for file_info in saved_files:
-                    try:
-                        # Read content
-                        file_content = self.file_adapter.read_file(file_info['file_path'])
-
-                        # Add to project files
-                        # Use the original_name which includes the directory path
-                        conversation_uc.add_project_file(file_info['original_name'], file_content)
-                    except Exception as e:
-                        print(f"Error adding file to project: {str(e)}")
-                        # Continue with other files
-
-                # Return information about uploaded files
-                return jsonify({
-                    'files': saved_files,
-                    'count': len(saved_files),
-                    'processed': len(saved_files),
-                    'skipped': len(skipped_files),
-                    'session_id': session_id,
-                    'message': f"Uploaded {len(saved_files)} code files (skipped {len(skipped_files)} non-code files)"
-                })
             except Exception as e:
                 self.app.logger.error(f"Error uploading multiple files: {str(e)}")
                 return jsonify({'error': str(e)}), 500
@@ -312,6 +388,7 @@ class WebApp:
             Creates a Socket.IO room for the session.
             """
             session_id = data.get('session_id')
+            print(f"Client joining session: {session_id}")
 
             if not session_id:
                 emit('session_joined', {'status': 'error', 'message': 'Missing session ID'})
@@ -332,21 +409,22 @@ class WebApp:
             # Tell client they've successfully joined
             emit('session_joined', {'status': 'success'})
 
-            # Send current model status to the client
+            # Check model status and notify client accordingly
             if self.model_manager.is_initialized():
+                # If model is already initialized, notify client immediately
+                print(f"Model already initialized, notifying client in session {session_id}")
                 emit('model_initialized', {'status': 'success'})
+            elif self.model_manager.is_initializing():
+                # If model is currently being initialized, notify client of loading status
+                print(f"Model initialization in progress, notifying client in session {session_id}")
+                emit('model_status', {
+                    'status': 'loading',
+                    'message': 'Loading AI model...'
+                })
             else:
-                # Check if initialization is already in progress
-                if session_id in self.model_initialization_threads:
-                    thread = self.model_initialization_threads[session_id]
-                    if thread and thread.is_alive():
-                        emit('model_status', {
-                            'status': 'loading',
-                            'message': 'Loading AI model...'
-                        })
-                else:
-                    # Start model initialization
-                    self._initialize_model_async(session_id)
+                # Start model initialization - this will check again if model is initializing
+                print(f"Starting model initialization for session {session_id}")
+                self._initialize_model_async(session_id)
 
         @self.socketio.on('user_message')
         def handle_message(data):
@@ -426,6 +504,50 @@ class WebApp:
 
             # Process message in a separate thread to avoid blocking
             self._process_message_async(session_id, conversation_uc, message, code_content)
+
+        @self.app.route('/api/update-file', methods=['POST'])
+        def update_file():
+            """Update a file in the project."""
+            try:
+                # Get session ID from request
+                session_id = get_session_id_from_request()
+
+                # Check if this is a JSON request or form data
+                if request.is_json:
+                    data = request.get_json()
+                    session_id = data.get('session_id', session_id)
+                    filename = data.get('filename')
+                    content = data.get('content')
+                else:
+                    session_id = request.form.get('session_id', session_id)
+                    filename = request.form.get('filename')
+                    content = request.form.get('content')
+
+                # Ensure we have a valid session
+                if not session_id:
+                    return jsonify({'error': 'No active session'}), 400
+
+                session_data = self.session_manager.get_session(session_id)
+                if not session_data or 'conversation_uc' not in session_data:
+                    return jsonify({'error': 'Invalid session'}), 400
+
+                # Make sure we have filename and content
+                if not filename or not content:
+                    return jsonify({'error': 'Missing filename or content'}), 400
+
+                conversation_uc = session_data['conversation_uc']
+
+                # Update the file in the conversation
+                conversation_uc.add_project_file(filename, content)
+
+                return jsonify({
+                    'success': True,
+                    'message': f"Updated file: {filename}",
+                    'filename': filename
+                })
+            except Exception as e:
+                self.app.logger.error(f"Error updating file: {str(e)}")
+                return jsonify({'error': str(e)}), 500
 
         @self.socketio.on('project_update')
         def handle_project_update(data):
@@ -539,6 +661,23 @@ class WebApp:
 
         def initialize_task():
             try:
+                # Check if model is already initialized or initializing
+                if self.model_manager.is_initialized():
+                    print("Model already initialized, notifying client")
+                    # Notify client that model is ready
+                    self.socketio.emit('model_initialized',
+                                       {'status': 'success'},
+                                       room=session_id)
+                    return
+
+                if self.model_manager.is_initializing():
+                    print(f"Model initialization already in progress, notifying client")
+                    # Notify client that model is being loaded
+                    self.socketio.emit('model_status',
+                                       {'status': 'loading', 'message': 'Loading AI model...'},
+                                       room=session_id)
+                    return
+
                 # Notify client that model loading has started
                 self.socketio.emit('model_status',
                                    {'status': 'loading', 'message': 'Loading AI model...'},
@@ -548,8 +687,8 @@ class WebApp:
                 print(f"Initializing model for session {session_id}...")
                 start_time = time.time()
 
-                if not self.model_manager.is_initialized():
-                    self.model_manager.initialize(self.container.config.model_name())
+                # Initialize the model
+                self.model_manager.initialize(self.container.config.model_name())
 
                 model, tokenizer = self.model_manager.get_model_and_tokenizer()
 
@@ -564,6 +703,7 @@ class WebApp:
                     conversation_uc.set_model_and_tokenizer(model, tokenizer)
 
                 # Notify client that model is ready
+                print(f"Model initialized, sending success to session {session_id}")
                 self.socketio.emit('model_initialized',
                                    {'status': 'success'},
                                    room=session_id)
@@ -586,15 +726,19 @@ class WebApp:
                 if session_id in self.model_initialization_threads:
                     del self.model_initialization_threads[session_id]
 
-        # Start model initialization in a separate thread
-        thread = threading.Thread(target=initialize_task)
-        thread.daemon = True
-        thread.start()
+        # Only start a new thread if the model isn't already initialized or initializing
+        if not self.model_manager.is_initialized() and not self.model_manager.is_initializing():
+            # Start model initialization in a separate thread
+            thread = threading.Thread(target=initialize_task)
+            thread.daemon = True
+            thread.start()
 
-        # Store thread reference
-        self.model_initialization_threads[session_id] = thread
-
-        print(f"Started model initialization thread {thread.name} for session {session_id}")
+            # Store thread reference
+            self.model_initialization_threads[session_id] = thread
+            print(f"Started model initialization thread {thread.name} for session {session_id}")
+        else:
+            # Call initialize task directly (it will just notify the client)
+            initialize_task()
 
     def _process_message_async(self, session_id, conversation_uc, message, code_content):
         """Process the message in a separate thread."""
@@ -643,6 +787,23 @@ class WebApp:
         print("Starting server - model will be loaded when first request is received")
         self.socketio.run(self.app, debug=debug, host=host, port=port)
 
+
+def get_session_id_from_request():
+    """Extract session ID from request - either from Flask session or X-Session-Id header"""
+    from flask import request, session as flask_session
+
+    # First try to get from Flask session
+    session_id = flask_session.get('chat_session_id')
+
+    # If not in Flask session, try X-Session-Id header
+    if not session_id and 'X-Session-Id' in request.headers:
+        session_id = request.headers.get('X-Session-Id')
+
+        # Store in Flask session for consistency
+        if session_id:
+            flask_session['chat_session_id'] = session_id
+
+    return session_id
 
 def create_app():
     """Factory function to create and initialize the application."""
